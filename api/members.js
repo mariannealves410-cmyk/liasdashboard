@@ -1,5 +1,6 @@
 // api/members.js
 const { supabase } = require("./_lib/supabase");
+const { supabaseToMember } = require("./_lib/supabase-mappers");
 const { requireAuth, sendJSON, sendError, handleCors } = require("./_lib/auth-utils");
 
 module.exports = async function handler(req, res) {
@@ -19,14 +20,14 @@ module.exports = async function handler(req, res) {
                     .single();
 
                 if (error || !member) return sendError(res, 404, "Membro não encontrado");
-                return sendJSON(res, 200, member);
+                return sendJSON(res, 200, supabaseToMember(member));
             } else {
                 const { data: members, error } = await supabase
                     .from('members')
                     .select('*, activities(*)');
 
                 if (error) throw error;
-                return sendJSON(res, 200, members);
+                return sendJSON(res, 200, members.map(supabaseToMember));
             }
         }
 
@@ -46,8 +47,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            member.activities = [];
-            return sendJSON(res, 201, member);
+            return sendJSON(res, 201, supabaseToMember(member));
         }
 
         if (req.method === "PUT") {
@@ -70,7 +70,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 200, member);
+            return sendJSON(res, 200, supabaseToMember(member));
         }
 
         if (req.method === "DELETE") {

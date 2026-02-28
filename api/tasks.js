@@ -1,5 +1,6 @@
 // api/tasks.js
 const { supabase } = require("./_lib/supabase");
+const { supabaseToTask } = require("./_lib/supabase-mappers");
 const { requireAuth, sendJSON, sendError, handleCors } = require("./_lib/auth-utils");
 
 module.exports = async function handler(req, res) {
@@ -17,7 +18,7 @@ module.exports = async function handler(req, res) {
 
             const { data: tasks, error } = await query.order('order_num', { ascending: true });
             if (error) throw error;
-            return sendJSON(res, 200, tasks);
+            return sendJSON(res, 200, tasks.map(supabaseToTask));
         }
 
         if (req.method === "POST") {
@@ -36,7 +37,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 201, task);
+            return sendJSON(res, 201, supabaseToTask(task));
         }
 
         if (req.method === "PUT") {
@@ -59,7 +60,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 200, task);
+            return sendJSON(res, 200, supabaseToTask(task));
         }
 
         if (req.method === "DELETE") {

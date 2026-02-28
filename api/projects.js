@@ -1,5 +1,6 @@
 // api/projects.js
 const { supabase } = require("./_lib/supabase");
+const { supabaseToProject } = require("./_lib/supabase-mappers");
 const { requireAuth, sendJSON, sendError, handleCors } = require("./_lib/auth-utils");
 
 module.exports = async function handler(req, res) {
@@ -21,10 +22,7 @@ module.exports = async function handler(req, res) {
 
                 if (error || !project) return sendError(res, 404, "Projeto não encontrado");
 
-                // Mapear order_num para manter compatibilidade se necessário
-                project.tasks = (project.tasks || []).sort((a, b) => a.order_num - b.order_num);
-
-                return sendJSON(res, 200, project);
+                return sendJSON(res, 200, supabaseToProject(project));
             } else {
                 // Lista de todos os projetos + todas as tarefas
                 const { data: projects, error } = await supabase
@@ -33,12 +31,7 @@ module.exports = async function handler(req, res) {
 
                 if (error) throw error;
 
-                // Ordenar tarefas dentro de cada projeto
-                projects.forEach(p => {
-                    p.tasks = (p.tasks || []).sort((a, b) => a.order_num - b.order_num);
-                });
-
-                return sendJSON(res, 200, projects);
+                return sendJSON(res, 200, projects.map(supabaseToProject));
             }
         }
 
@@ -67,8 +60,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            project.tasks = [];
-            return sendJSON(res, 201, project);
+            return sendJSON(res, 201, supabaseToProject(project));
         }
 
         if (req.method === "PUT") {
@@ -87,7 +79,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 200, project);
+            return sendJSON(res, 200, supabaseToProject(project));
         }
 
         if (req.method === "DELETE") {

@@ -1,5 +1,5 @@
-// api/events.js
 const { supabase } = require("./_lib/supabase");
+const { supabaseToEvent } = require("./_lib/supabase-mappers");
 const { requireAuth, sendJSON, sendError, handleCors } = require("./_lib/auth-utils");
 
 module.exports = async function handler(req, res) {
@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
                     .single();
 
                 if (error || !event) return sendError(res, 404, "Evento não encontrado");
-                return sendJSON(res, 200, event);
+                return sendJSON(res, 200, supabaseToEvent(event));
             } else {
                 const { data: events, error } = await supabase
                     .from('events')
@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
                     .order('start_date', { ascending: true });
 
                 if (error) throw error;
-                return sendJSON(res, 200, events);
+                return sendJSON(res, 200, events.map(supabaseToEvent));
             }
         }
 
@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 201, event);
+            return sendJSON(res, 201, supabaseToEvent(event));
         }
 
         if (req.method === "PUT") {
@@ -74,7 +74,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 200, event);
+            return sendJSON(res, 200, supabaseToEvent(event));
         }
 
         if (req.method === "DELETE") {

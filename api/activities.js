@@ -1,5 +1,6 @@
 // api/activities.js
 const { supabase } = require("./_lib/supabase");
+const { supabaseToActivity } = require("./_lib/supabase-mappers");
 const { requireAuth, sendJSON, sendError, handleCors } = require("./_lib/auth-utils");
 
 module.exports = async function handler(req, res) {
@@ -17,7 +18,7 @@ module.exports = async function handler(req, res) {
 
             const { data: activities, error } = await query;
             if (error) throw error;
-            return sendJSON(res, 200, activities);
+            return sendJSON(res, 200, activities.map(supabaseToActivity));
         }
 
         if (req.method === "POST") {
@@ -36,7 +37,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 201, activity);
+            return sendJSON(res, 201, supabaseToActivity(activity));
         }
 
         if (req.method === "PUT") {
@@ -61,7 +62,7 @@ module.exports = async function handler(req, res) {
                 .single();
 
             if (error) throw error;
-            return sendJSON(res, 200, activity);
+            return sendJSON(res, 200, supabaseToActivity(activity));
         }
 
         if (req.method === "DELETE") {
