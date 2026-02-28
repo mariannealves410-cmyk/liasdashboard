@@ -35,15 +35,18 @@ module.exports = async function handler(req, res) {
             const data = req.body || {};
             if (!data.title) return sendError(res, 400, "Título é obrigatório");
 
+            // Converter strings vazias em null para campos UUID
+            const projectId = data.project_id || data.projectId || null;
+
             const { data: event, error } = await supabase
                 .from('events')
                 .insert({
                     title: data.title,
                     start_date: data.start_date || data.startDate,
                     end_date: data.end_date || data.endDate,
-                    project_id: data.project_id || data.projectId,
-                    color_index: data.color_index || data.colorIndex || 0,
-                    description: data.description
+                    project_id: projectId || null,
+                    color_index: data.color_index ?? data.colorIndex ?? 0,
+                    description: data.description || null
                 })
                 .select()
                 .single();
@@ -57,14 +60,17 @@ module.exports = async function handler(req, res) {
             const data = req.body || {};
 
             const updateData = {};
-            const keys = ["title", "start_date", "startDate", "end_date", "endDate", "project_id", "projectId", "color_index", "colorIndex", "description"];
-            keys.forEach(k => { if (data[k] !== undefined) updateData[k] = data[k]; });
+            if (data.title !== undefined) updateData.title = data.title;
+            if (data.description !== undefined) updateData.description = data.description || null;
+            if (data.start_date || data.startDate) updateData.start_date = data.start_date || data.startDate;
+            if (data.end_date || data.endDate) updateData.end_date = data.end_date || data.endDate;
+            if (data.color_index !== undefined || data.colorIndex !== undefined) updateData.color_index = data.color_index ?? data.colorIndex ?? 0;
 
-            // Normalizar campos date/color
-            if (updateData.startDate) { updateData.start_date = updateData.startDate; delete updateData.startDate; }
-            if (updateData.endDate) { updateData.end_date = updateData.endDate; delete updateData.endDate; }
-            if (updateData.projectId) { updateData.project_id = updateData.projectId; delete updateData.projectId; }
-            if (updateData.colorIndex) { updateData.color_index = updateData.colorIndex; delete updateData.colorIndex; }
+            // Converter string vazia para null em campos UUID
+            if (data.project_id !== undefined || data.projectId !== undefined) {
+                const pid = data.project_id || data.projectId;
+                updateData.project_id = pid || null;
+            }
 
             const { data: event, error } = await supabase
                 .from('events')

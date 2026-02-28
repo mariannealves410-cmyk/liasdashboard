@@ -25,11 +25,15 @@ module.exports = async function handler(req, res) {
             const data = req.body || {};
             if (!data.text) return sendError(res, 400, "Texto é obrigatório");
 
+            // Converter strings vazias em null para campos UUID
+            const memberId = data.member_id || data.memberId || null;
+            const projectId = data.project_id || data.projectId || null;
+
             const { data: activity, error } = await supabase
                 .from('activities')
                 .insert({
-                    member_id: data.member_id || data.memberId,
-                    project_id: data.project_id || data.projectId,
+                    member_id: memberId || null,
+                    project_id: projectId || null,
                     text: data.text,
                     done: data.done || false
                 })
