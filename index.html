@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LIAS 2026 - Dashboard Estratégico</title>
+  <meta name="description" content="Dashboard de Planejamento Estratégico da Liga de Inteligência Artificial na Saúde">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      background: #F7F8FA;
+      overflow: hidden;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #E4E8EE;
+      border-radius: 10px;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: #2BB5A0 !important;
+    }
+
+    #root {
+      display: flex;
+      height: 100vh;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" src="api-client.js"></script>
+  <script type="text/babel" src="data.js"></script>
+  <script type="text/babel" src="theme.js"></script>
+  <script type="text/babel" src="components.js"></script>
+  <script type="text/babel" src="pages-timeline.js"></script>
+  <script type="text/babel" src="pages-metrics.js"></script>
+  <script type="text/babel" src="pages-teams.js"></script>
+  <script type="text/babel" src="pages-projects.js"></script>
+  <script type="text/babel" src="pages-login.js"></script>
+  <script type="text/babel" src="app.js"></script>
+</body>
+
+</html>

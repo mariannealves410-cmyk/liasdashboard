@@ -1,0 +1,2375 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LIAS 2026 - Dashboard Estratégico</title>
+  <meta name="description" content="Dashboard de Planejamento Estratégico da Liga de Inteligência Artificial na Saúde">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', 'Segoe UI', sans-serif; background: #F7F8FA; overflow: hidden; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #E4E8EE; border-radius: 10px; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #2BB5A0 !important; }
+    #root { display: flex; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+
+// React hooks - declaracao unica
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ========== auth.js ==========
+// Auth Service - MVP sem backend
+// Credenciais admin padrão
+window.AUTH_CONFIG = {
+    ADMIN_EMAIL: "admin@lias.com",
+    ADMIN_PASSWORD: "lias2026"
+};
+
+window.authService = {
+    _getUsers: function () {
+        try { return JSON.parse(localStorage.getItem("lias_users") || "[]"); } catch (e) { return []; }
+    },
+    _saveUsers: function (users) {
+        localStorage.setItem("lias_users", JSON.stringify(users));
+    },
+    register: function (name, email, password) {
+        return new Promise(function (resolve, reject) {
+            setTimeout(function () {
+                if (!name || !email || !password) {
+                    reject({ message: "Preencha todos os campos obrigatórios" }); return;
+                }
+                if (email === AUTH_CONFIG.ADMIN_EMAIL) {
+                    reject({ message: "Este email já está em uso" }); return;
+                }
+                var users = authService._getUsers();
+                if (users.find(function (u) { return u.email === email; })) {
+                    reject({ message: "Este email já está cadastrado" }); return;
+                }
+                users.push({ id: Date.now(), name: name, email: email, password: password, createdAt: new Date().toISOString() });
+                authService._saveUsers(users);
+                resolve({ success: true });
+            }, 600);
+        });
+    },
+    login: function (email, password, remember) {
+        return new Promise(function (resolve, reject) {
+            setTimeout(function () {
+                var isAdmin = email === AUTH_CONFIG.ADMIN_EMAIL && password === AUTH_CONFIG.ADMIN_PASSWORD;
+                var users = authService._getUsers();
+                var user = users.find(function (u) { return u.email === email && u.password === password; });
+
+                if (isAdmin || user) {
+                    var token = "lias_auth_" + Date.now() + "_" + Math.random().toString(36).substr(2);
+                    var userName = isAdmin ? "Admin" : user.name;
+                    var storage = remember ? localStorage : sessionStorage;
+                    storage.setItem("lias_auth_token", token);
+                    storage.setItem("lias_auth_email", email);
+                    storage.setItem("lias_auth_name", userName);
+                    storage.setItem("lias_auth_storage", remember ? "local" : "session");
+                    localStorage.setItem("lias_auth_type", remember ? "local" : "session");
+                    resolve({ success: true, token: token, name: userName });
+                } else {
+                    reject({ message: "Email ou senha incorretos" });
+                }
+            }, 800);
+        });
+    },
+    logout: function () {
+        localStorage.removeItem("lias_auth_token");
+        localStorage.removeItem("lias_auth_email");
+        localStorage.removeItem("lias_auth_name");
+        localStorage.removeItem("lias_auth_type");
+        sessionStorage.removeItem("lias_auth_token");
+        sessionStorage.removeItem("lias_auth_email");
+        sessionStorage.removeItem("lias_auth_name");
+        sessionStorage.removeItem("lias_auth_storage");
+    },
+    isAuthenticated: function () {
+        var authType = localStorage.getItem("lias_auth_type");
+        if (authType === "local") {
+            return !!localStorage.getItem("lias_auth_token");
+        } else {
+            return !!sessionStorage.getItem("lias_auth_token");
+        }
+    },
+    getEmail: function () {
+        return localStorage.getItem("lias_auth_email") || sessionStorage.getItem("lias_auth_email") || "";
+    },
+    getName: function () {
+        return localStorage.getItem("lias_auth_name") || sessionStorage.getItem("lias_auth_name") || "";
+    }
+};
+
+// ========== theme.js ==========
+window.COLORS = {
+    green: "#1B8C5A", teal: "#2BB5A0", cyan: "#3DC1C9", blue: "#1A3A7D",
+    darkBlue: "#0F2451", lightTeal: "#E8F8F5", lightGreen: "#EAF7F0",
+    lightBlue: "#EBF0FA", lightCyan: "#E6FAFA", bg: "#F7F8FA",
+    card: "#FFFFFF", text: "#1A2332", textMuted: "#6B7A8D", border: "#E4E8EE",
+};
+
+window.FOCUS_COLORS = {
+    "Comunicação": { bg: "#E8F8F5", text: "#1B8C5A", border: "#1B8C5A" },
+    "Pesquisa Aplicada": { bg: "#EBF0FA", text: "#1A3A7D", border: "#1A3A7D" },
+    "Desenvolvimento": { bg: "#E6FAFA", text: "#2BB5A0", border: "#2BB5A0" },
+    "Ética e Governança": { bg: "#FFF3E6", text: "#C47A20", border: "#C47A20" },
+    "Impacto Social": { bg: "#F0E6FA", text: "#6B3FA0", border: "#6B3FA0" },
+    "Engajamento": { bg: "#FDE8F0", text: "#C44070", border: "#C44070" },
+    "Pesquisa": { bg: "#EBF0FA", text: "#1A3A7D", border: "#1A3A7D" },
+    "Ensino": { bg: "#E6FAFA", text: "#2BB5A0", border: "#2BB5A0" },
+    "Extensão": { bg: "#FFF3E6", text: "#C47A20", border: "#C47A20" },
+    "Evento": { bg: "#F0E6FA", text: "#6B3FA0", border: "#6B3FA0" },
+    "Mkt/Engajamento": { bg: "#FDE8F0", text: "#C44070", border: "#C44070" },
+    "Educação": { bg: "#E8F8F5", text: "#1B8C5A", border: "#1B8C5A" },
+};
+
+window.STATUS_COLORS = {
+    "Planejamento": { bg: "#FFF3E6", text: "#C47A20" },
+    "Em Andamento": { bg: "#E8F8F5", text: "#1B8C5A" },
+    "Em Revisão": { bg: "#EBF0FA", text: "#1A3A7D" },
+    "Concluído": { bg: "#E6FAFA", text: "#2BB5A0" },
+    "Contínuo": { bg: "#E8F8F5", text: "#1B8C5A" },
+    "Semestral": { bg: "#EBF0FA", text: "#1A3A7D" },
+    "Semanal": { bg: "#E6FAFA", text: "#2BB5A0" },
+    "Pontual": { bg: "#FDE8F0", text: "#C44070" },
+    "8 Aulas": { bg: "#F0E6FA", text: "#6B3FA0" },
+    "4 Meses": { bg: "#FFF3E6", text: "#C47A20" },
+};
+
+window.PRIORITY_COLORS = {
+    "Alta": { bg: "#FFE8E8", text: "#D04040" },
+    "Média": { bg: "#FFF3E6", text: "#C47A20" },
+    "Normal": { bg: "#E8F8F5", text: "#1B8C5A" },
+};
+
+window.EVENT_COLORS = [
+    { bg: "#E8F8F5", text: "#1B8C5A", border: "#1B8C5A" },
+    { bg: "#EBF0FA", text: "#1A3A7D", border: "#1A3A7D" },
+    { bg: "#E6FAFA", text: "#2BB5A0", border: "#2BB5A0" },
+    { bg: "#FFF3E6", text: "#C47A20", border: "#C47A20" },
+    { bg: "#F0E6FA", text: "#6B3FA0", border: "#6B3FA0" },
+    { bg: "#FDE8F0", text: "#C44070", border: "#C44070" },
+    { bg: "#FFE8E8", text: "#D04040", border: "#D04040" },
+];
+
+window.PROJECT_COLORS = [
+    "#1B8C5A", "#1A3A7D", "#2BB5A0", "#C47A20", "#6B3FA0",
+    "#C44070", "#3DC1C9", "#0F2451", "#D04040", "#8B5CF6",
+];
+
+window.MEMBER_ICONS = [
+    "👤", "👩", "👨", "👩‍💼", "👨‍💼", "👩‍🔬", "👨‍🔬", "👩‍💻", "👨‍💻", "👩‍🎓", "👨‍🎓",
+    "👩‍⚕️", "👨‍⚕️", "🧑‍🔬", "🧑‍💻", "🧑‍🎓", "🧑‍⚕️", "👸", "🤴", "🦸‍♀️", "🦸‍♂️",
+];
+
+window.SIDEBAR_ITEMS = [
+    { icon: "🏠", label: "Dashboard", id: "dashboard" },
+    { icon: "📅", label: "Cronograma", id: "timeline" },
+    { icon: "👥", label: "Equipes", id: "teams" },
+    { icon: "📊", label: "Métricas", id: "metrics" },
+];
+
+// ========== data.js ==========
+window.initialProjects = [
+    {
+        id: "P1", icon: "📱", title: "Divulgação Educacional em IA", subtitle: "Instagram",
+        focus: "Comunicação", status: "Contínuo", priority: "Alta",
+        responsible: "Equipe de Conteúdo", deadline: "Contínuo",
+        description: "Posicionar a LIAS como fonte confiável de informação sobre IA através do Instagram, com 4 pilares de conteúdo estratégico.",
+        pillars: [
+            { name: "Aprendendo sobre IA", format: "Carrossel", icon: "🧠" },
+            { name: "IA em Ação", format: "Reels", icon: "🎬" },
+            { name: "News IA", format: "Post/Carrossel", icon: "📰" },
+            { name: "IA 1 + IA 2 = Sucesso", format: "Carrossel/Reels", icon: "🔗" },
+        ],
+        tasks: [
+            { text: "Definir identidade visual e paleta", done: true },
+            { text: "Criar templates no Canva/Figma", done: true },
+            { text: "Planejar calendário editorial mensal", done: false },
+            { text: "Produzir primeiro lote de conteúdos", done: false },
+            { text: "Publicar 3 posts/semana consistente", done: false },
+        ],
+    },
+    {
+        id: "P2", icon: "🔍", title: "Análise Comparativa de IAs", subtitle: "Estudo de Ferramentas",
+        focus: "Pesquisa", status: "Semestral", priority: "Média",
+        responsible: "7 Grupos de Trabalho", deadline: "8 Semanas",
+        description: "Estudo comparativo das principais IAs (Gemini, Manus, DeepSeek, Chat.Z.AI, Claude, Perplexity, Grok) com painéis de análise e mini-projetos práticos.",
+        groups: [
+            { name: "Google Gemini", group: "Grupo 1" }, { name: "Manus (Agente)", group: "Grupo 2" },
+            { name: "DeepSeek", group: "Grupo 3" }, { name: "Chat.Z.AI", group: "Grupo 4" },
+            { name: "Anthropic Claude", group: "Grupo 5" }, { name: "Perplexity AI", group: "Grupo 6" },
+            { name: "xAI Grok", group: "Grupo 7" },
+        ],
+        tasks: [
+            { text: "Distribuir IAs entre os grupos", done: true },
+            { text: "Definir critérios de avaliação", done: true },
+            { text: "Realizar testes com as IAs", done: false },
+            { text: "Preencher painéis de análise", done: false },
+            { text: "Desenvolver mini-projetos (estudo de caso)", done: false },
+            { text: "Apresentações dos grupos", done: false },
+        ],
+    },
+    {
+        id: "P3", icon: "🤖", title: "Curso de Agentes de IA", subtitle: "Agentes e Automação",
+        focus: "Ensino", status: "8 Aulas", priority: "Alta",
+        responsible: "Marianne + Prof. Orientador", deadline: "8 Aulas",
+        description: "Curso intensivo cobrindo GPTs personalizados, automação com N8N e agentes autônomos com Antigravity, culminando em Demo Day.",
+        blocks: [
+            { name: "Bloco 1: GPTs", aulas: "Aulas 1-3", icon: "💬", topics: ["O que são agentes", "Primeiro GPT", "Knowledge Base + Actions"] },
+            { name: "Bloco 2: N8N", aulas: "Aulas 4-5", icon: "⚡", topics: ["Introdução ao N8N", "N8N + APIs de IA"] },
+            { name: "Bloco 3: Antigravity", aulas: "Aulas 6-7", icon: "🚀", topics: ["Ecossistema de Agentes", "Agente de Pesquisa"] },
+            { name: "Demo Day", aulas: "Aula 8", icon: "🏆", topics: ["Apresentações Finais"] },
+        ],
+        tasks: [
+            { text: "Aula 1: O que são agentes de IA", done: false },
+            { text: "Aula 2: Primeiro GPT Personalizado", done: false },
+            { text: "Aula 3: Knowledge Base + Actions", done: false },
+            { text: "Aula 4: Introdução ao N8N", done: false },
+            { text: "Aula 5: N8N + APIs de IA", done: false },
+            { text: "Aula 6-7: Antigravity", done: false },
+            { text: "Demo Day: Apresentações", done: false },
+        ],
+    },
+    {
+        id: "P4", icon: "🏥", title: "SUS-GPT", subtitle: "Agente para Dados do DataSUS",
+        focus: "Extensão", status: "4 Meses", priority: "Alta",
+        responsible: "Equipe Técnica", deadline: "4 Meses",
+        description: "Desenvolvimento de agente de IA treinado como 'tradutor' e 'guia' para os bancos de dados do DataSUS, democratizando acesso à análise de dados de saúde.",
+        months: [
+            { name: "Mês 1: Imersão e Base de Conhecimento", icon: "📚" },
+            { name: "Mês 2: Construção e Treinamento", icon: "🔧" },
+            { name: "Mês 3: Automação e Validação", icon: "✅" },
+            { name: "Mês 4: Disseminação e Evento", icon: "🎯" },
+        ],
+        tasks: [
+            { text: "Definir bases do DataSUS (SIM, SINASC, SIH)", done: false },
+            { text: "Coletar dicionários de variáveis", done: false },
+            { text: "Criar 'Manual Mestre'", done: false },
+            { text: "Construir GPT v1.0", done: false },
+            { text: "Testes e refinamento do prompt", done: false },
+            { text: "Validação por pares", done: false },
+            { text: "Apresentação no evento", done: false },
+        ],
+    },
+    {
+        id: "P5", icon: "⚖️", title: "Evento 'O Dilema Digital'", subtitle: "IA e Pesquisa: Ética à Prática",
+        focus: "Evento", status: "Pontual", priority: "Alta",
+        responsible: "Equipe de Eventos", deadline: "Pontual",
+        description: "Mesa-redonda multidisciplinar sobre os desafios éticos da IA na pesquisa, com apresentação do SUS-GPT como caso de uso positivo.",
+        acts: [
+            { name: "Ato 1: A Ferramenta", desc: "Demonstração do poder das IAs", icon: "🔧" },
+            { name: "Ato 2: O Debate", desc: "Mesa-redonda sobre limites éticos", icon: "💬" },
+            { name: "Ato 3: A Solução", desc: "Apresentação do SUS-GPT", icon: "💡" },
+            { name: "Ato 4: A Síntese", desc: "Conclusões e Q&A", icon: "🎯" },
+        ],
+        tasks: [
+            { text: "Definir participantes da mesa-redonda", done: false },
+            { text: "Preparar demonstração das IAs", done: false },
+            { text: "Elaborar roteiro de discussão", done: false },
+            { text: "Criar Protocolo de Integridade da LIAS", done: false },
+            { text: "Divulgação do evento", done: false },
+        ],
+    },
+    {
+        id: "P6", icon: "📋", title: "Prontuário do Futuro", subtitle: "Protocolo Ético de IA na Saúde",
+        focus: "Extensão", status: "Semestral", priority: "Alta",
+        responsible: "Equipe de Ética", deadline: "Semestral",
+        description: "Criar e disseminar protocolo de uso ético da IA na saúde, baseado em diretrizes da OMS e AMA, com E-book e Website.",
+        principles: [
+            "Verificação Humana Soberana", "Proteção de Dados do Paciente",
+            "Consciência sobre Vieses", "Transparência com o Paciente",
+            "Ceticismo Saudável e Validação",
+        ],
+        chapters: [
+            "O que é IA na Saúde (e o que não é)?", "As 5 Grandes Aplicações da IA na Saúde",
+            "O Protocolo de Uso Seguro", "Guia Prático de Ferramentas", "O Futuro e a Responsabilidade Legal",
+        ],
+        tasks: [
+            { text: "Pesquisar diretrizes OMS e AMA", done: false },
+            { text: "Estruturar capítulos do E-book", done: false },
+            { text: "Redigir os 5 princípios fundamentais", done: false },
+            { text: "Design e diagramação do E-book", done: false },
+            { text: "Desenvolvimento do Website", done: false },
+            { text: "Publicar e distribuir", done: false },
+        ],
+    },
+    {
+        id: "P7", icon: "🎙️", title: "Podcast 'Atualiza LIAS'", subtitle: "Notícias Semanais de IA",
+        focus: "Comunicação", status: "Semanal", priority: "Média",
+        responsible: "Equipe de Conteúdo", deadline: "Semanal",
+        description: "Fluxo de trabalho semanal usando NotebookLM para gerar podcast curto com as principais notícias de IA na saúde.",
+        workflow: [
+            { name: "Etapa 1: Coleta", desc: "GPT 'Repórter LIAS' busca 5 notícias", icon: "🔍" },
+            { name: "Etapa 2: Estúdio", desc: "NotebookLM gera Audio Overview", icon: "🎧" },
+            { name: "Etapa 3: Distribuição", desc: "Post no WhatsApp/Telegram", icon: "📤" },
+        ],
+        tasks: [
+            { text: "Configurar GPT 'Repórter LIAS'", done: false },
+            { text: "Criar notebook template no NotebookLM", done: false },
+            { text: "Definir fluxo de produção semanal", done: false },
+            { text: "Produzir episódio piloto", done: false },
+            { text: "Publicar regularmente", done: false },
+        ],
+    },
+    {
+        id: "P8", icon: "🎓", title: "Academia Aumentada", subtitle: "Fluxo de Trabalho Científico com IA",
+        focus: "Pesquisa", status: "Contínuo", priority: "Alta",
+        responsible: "Professora Orientadora", deadline: "13 Semanas",
+        description: "Jornada de 13 semanas capacitando membros a otimizar pesquisa científica com stack de ferramentas de IA (Elicit, SciSpace, Consensus, Prism, Jenni.ai).",
+        phases: [
+            { name: "Fase 1: Lançamento", weeks: "Semana 1", icon: "🚀" },
+            { name: "Fase 2: Seminários", weeks: "Semanas 2-5", icon: "🎤" },
+            { name: "Fase 3: Projeto Prático", weeks: "Semanas 6-11", icon: "🔬" },
+            { name: "Fase 4: Submissão", weeks: "Semanas 12-13", icon: "📄" },
+        ],
+        tools: [
+            { name: "Elicit", function: "Mapeamento da Literatura" },
+            { name: "Consensus", function: "Respostas Baseadas em Evidências" },
+            { name: "SciSpace", function: "Leitor de PDF Interativo" },
+            { name: "Prism", function: "Extração de Dados para Revisões" },
+            { name: "Jenni.ai", function: "Assistente de Redação Acadêmica" },
+        ],
+        tasks: [
+            { text: "Aula inaugural com orientadora", done: false },
+            { text: "Seminário 1: Elicit + K-Dense", done: false },
+            { text: "Seminário 2: SciSpace + NotebookLM", done: false },
+            { text: "Seminário 3: Prism + Consensus", done: false },
+            { text: "Seminário 4: Jenni.ai + ChatGPT", done: false },
+            { text: "Submissão do artigo ao congresso", done: false },
+        ],
+    },
+    {
+        id: "P9", icon: "🧞", title: "Campanha 'Gênios da IA'", subtitle: "Marketing Interativo",
+        focus: "Mkt/Engajamento", status: "Pontual", priority: "Média",
+        responsible: "Equipe de Marketing", deadline: "4 Semanas",
+        description: "Campanha interativa no Instagram usando temática de 'Aladim e o Gênio da Lâmpada', onde membros da LIAS resolvem problemas acadêmicos usando IA.",
+        campaignPhases: [
+            { name: "Fase 1: Teaser", desc: "Cartazes + QR Code + Formulário", duration: "1 Semana", icon: "📢" },
+            { name: "Fase 2: Análise", desc: "Processar desejos + Roteirização", duration: "1 Semana", icon: "📊" },
+            { name: "Fase 3: Realização", desc: "Publicar Reels com soluções", duration: "2 Semanas", icon: "🎬" },
+        ],
+        tasks: [
+            { text: "Criar material visual (cartazes)", done: false },
+            { text: "Criar formulário de coleta de desejos", done: false },
+            { text: "Distribuir cartazes no campus", done: false },
+            { text: "Analisar e categorizar desejos", done: false },
+            { text: "Roteirizar vídeos de solução", done: false },
+            { text: "Produzir e publicar Reels", done: false },
+        ],
+    },
+    {
+        id: "P10", icon: "💡", title: "Evento NotebookLM", subtitle: "Palestra Prática",
+        focus: "Evento", status: "Pontual", priority: "Média",
+        responsible: "Equipe de Eventos", deadline: "Pontual",
+        description: "Workshop prático ensinando a comunidade acadêmica a usar o NotebookLM para acelerar pesquisas e estudos.",
+        acts: [
+            { name: "Ato 1: A Fundação", desc: "Construindo Base de Conhecimento", duration: "15 min", icon: "📚" },
+            { name: "Ato 2: A Análise", desc: "Leitura Ativa e Síntese", duration: "20 min", icon: "🔍" },
+            { name: "Ato 3: A Escrita", desc: "Otimizando Redação Acadêmica", duration: "15 min", icon: "✍️" },
+            { name: "Ato 4: Dicas + Q&A", desc: "Audio Overviews e Perguntas", duration: "10 min", icon: "💬" },
+        ],
+        tasks: [
+            { text: "Preparar notebook demonstrativo", done: false },
+            { text: "Criar material de apoio", done: false },
+            { text: "Divulgação para comunidade", done: false },
+            { text: "Executar evento", done: false },
+        ],
+    },
+];
+
+window.initialEvents = [
+    { id: 1, title: "Aula Inaugural - Academia Aumentada", startDate: "2026-03-02", endDate: "2026-03-02", projectId: "P8", colorIndex: 0, description: "Aula inaugural com a Professora Orientadora" },
+    { id: 2, title: "Seminário 1: Elicit + K-Dense", startDate: "2026-03-09", endDate: "2026-03-09", projectId: "P8", colorIndex: 1, description: "Seminário sobre mapeamento da literatura" },
+    { id: 3, title: "Evento O Dilema Digital", startDate: "2026-04-15", endDate: "2026-04-15", projectId: "P5", colorIndex: 4, description: "Mesa-redonda sobre ética e IA" },
+    { id: 4, title: "Demo Day - Curso de Agentes", startDate: "2026-05-20", endDate: "2026-05-20", projectId: "P3", colorIndex: 2, description: "Apresentações finais do curso" },
+    { id: 5, title: "Lançamento SUS-GPT", startDate: "2026-06-01", endDate: "2026-06-05", projectId: "P4", colorIndex: 3, description: "Evento de lançamento do SUS-GPT" },
+];
+
+window.initialMembers = [
+    {
+        id: 1, name: "Yan Maciel Ferreira Leite", icon: "👨‍💻", role: "Membro", projectIds: ["P1", "P3", "P4"],
+        activities: [{ id: 1, projectId: "P1", text: "Criar conteúdo para Instagram", done: true }, { id: 2, projectId: "P3", text: "Participar das aulas de Agentes", done: false }, { id: 3, projectId: "P4", text: "Auxiliar no desenvolvimento do SUS-GPT", done: false }]
+    },
+    {
+        id: 2, name: "Flávio Alexandre A. A. Delfino", icon: "👨‍🔬", role: "Membro", projectIds: ["P2", "P4", "P8"],
+        activities: [{ id: 1, projectId: "P2", text: "Testar e analisar IAs", done: true }, { id: 2, projectId: "P4", text: "Coletar dicionários de variáveis", done: false }, { id: 3, projectId: "P8", text: "Preparar seminário", done: false }]
+    },
+    {
+        id: 3, name: "Isabela Machado de Souza", icon: "👩‍🎓", role: "Membro", projectIds: ["P1", "P5", "P6"],
+        activities: [{ id: 1, projectId: "P1", text: "Planejar calendário editorial", done: true }, { id: 2, projectId: "P5", text: "Organizar evento O Dilema Digital", done: false }, { id: 3, projectId: "P6", text: "Pesquisar diretrizes OMS e AMA", done: false }]
+    },
+    {
+        id: 4, name: "Isabela Gonçalves Caris", icon: "👩‍💼", role: "Membro", projectIds: ["P2", "P7", "P9"],
+        activities: [{ id: 1, projectId: "P2", text: "Preencher painel de análise", done: false }, { id: 2, projectId: "P7", text: "Produzir episódio do podcast", done: false }, { id: 3, projectId: "P9", text: "Criar material visual da campanha", done: false }]
+    },
+    {
+        id: 5, name: "Gabriel Rodrigues", icon: "👨‍🎓", role: "Membro", projectIds: ["P3", "P4", "P10"],
+        activities: [{ id: 1, projectId: "P3", text: "Criar primeiro GPT personalizado", done: true }, { id: 2, projectId: "P4", text: "Construir GPT v1.0", done: false }, { id: 3, projectId: "P10", text: "Preparar demonstração NotebookLM", done: false }]
+    },
+    {
+        id: 6, name: "Murillo de Miranda", icon: "👨‍💻", role: "Membro", projectIds: ["P1", "P3", "P6"],
+        activities: [{ id: 1, projectId: "P1", text: "Gravar Reels demonstrativos", done: false }, { id: 2, projectId: "P3", text: "Desenvolver fluxos no N8N", done: false }, { id: 3, projectId: "P6", text: "Desenvolver website do protocolo", done: false }]
+    },
+    {
+        id: 7, name: "Aurélio Lacerda Sena Junior", icon: "👨‍🔬", role: "Membro", projectIds: ["P2", "P4", "P8"],
+        activities: [{ id: 1, projectId: "P2", text: "Testar Anthropic Claude", done: true }, { id: 2, projectId: "P4", text: "Criar Manual Mestre", done: false }, { id: 3, projectId: "P8", text: "Submeter artigo ao congresso", done: false }]
+    },
+    {
+        id: 8, name: "Mariana Barbosa de Figueiró", icon: "👩‍🔬", role: "Membro", projectIds: ["P5", "P6", "P8"],
+        activities: [{ id: 1, projectId: "P5", text: "Elaborar roteiro de discussão", done: false }, { id: 2, projectId: "P6", text: "Redigir os 5 princípios fundamentais", done: false }, { id: 3, projectId: "P8", text: "Preparar Seminário 2", done: false }]
+    },
+    {
+        id: 9, name: "Rafael Luiz de Araujo", icon: "👨‍💼", role: "Membro", projectIds: ["P1", "P7", "P9"],
+        activities: [{ id: 1, projectId: "P1", text: "Produzir conteúdo News IA", done: true }, { id: 2, projectId: "P7", text: "Configurar GPT Repórter LIAS", done: false }, { id: 3, projectId: "P9", text: "Distribuir cartazes no campus", done: false }]
+    },
+    {
+        id: 10, name: "Guilherme Vilas Boas Ferreira", icon: "👨‍🎓", role: "Membro", projectIds: ["P2", "P3", "P10"],
+        activities: [{ id: 1, projectId: "P2", text: "Desenvolver mini-projeto com IA", done: false }, { id: 2, projectId: "P3", text: "Criar agente com Antigravity", done: false }, { id: 3, projectId: "P10", text: "Criar material de apoio", done: false }]
+    },
+    {
+        id: 11, name: "Thiago Souza", icon: "👨‍💻", role: "Membro", projectIds: ["P4", "P5", "P7"],
+        activities: [{ id: 1, projectId: "P4", text: "Testes e refinamento do prompt", done: false }, { id: 2, projectId: "P5", text: "Preparar demonstração das IAs", done: false }, { id: 3, projectId: "P7", text: "Definir fluxo de produção semanal", done: false }]
+    },
+];
+
+// ========== components.js ==========
+
+window.ProgressBar = ({ value, color = COLORS.teal }) => (
+    <div style={{ width: "100%", height: 6, borderRadius: 3, background: COLORS.border }}>
+        <div style={{
+            width: `${Math.min(100, Math.max(0, value))}%`, height: "100%", borderRadius: 3,
+            background: `linear-gradient(90deg, ${COLORS.green}, ${color})`, transition: "width 0.4s ease"
+        }} />
+    </div>
+);
+
+window.Badge = ({ children, colors }) => (
+    <span style={{
+        display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 11,
+        fontWeight: 600, letterSpacing: "0.02em", background: colors.bg, color: colors.text,
+        border: `1px solid ${colors.border || colors.bg}`
+    }}>
+        {children}
+    </span>
+);
+
+window.CheckItem = ({ text, done, onToggle, onDelete }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+        <div onClick={onToggle} style={{
+            width: 18, height: 18, borderRadius: 4,
+            border: done ? "none" : `2px solid ${COLORS.border}`,
+            background: done ? `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})` : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            transition: "all 0.2s", cursor: "pointer"
+        }}>
+            {done && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 3.5L4 6.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+        </div>
+        <span onClick={onToggle} style={{
+            fontSize: 13, color: done ? COLORS.textMuted : COLORS.text,
+            textDecoration: done ? "line-through" : "none", transition: "all 0.2s", flex: 1, cursor: "pointer"
+        }}>
+            {text}
+        </span>
+        <button onClick={onDelete} style={{
+            background: "none", border: "none", color: COLORS.textMuted,
+            cursor: "pointer", padding: "2px 6px", borderRadius: 4, fontSize: 14, opacity: 0.5
+        }}
+            onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.5}>×</button>
+    </div>
+);
+
+window.AddTaskInput = ({ onAdd, focusColor }) => {
+    const [newTask, setNewTask] = useState("");
+    const [isAdding, setIsAdding] = useState(false);
+    const handleAdd = () => { if (newTask.trim()) { onAdd(newTask.trim()); setNewTask(""); setIsAdding(false); } };
+    const handleKeyDown = (e) => { if (e.key === "Enter") handleAdd(); else if (e.key === "Escape") { setNewTask(""); setIsAdding(false); } };
+
+    if (!isAdding) {
+        return (
+            <button onClick={() => setIsAdding(true)} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                width: "100%", padding: "10px 12px", marginTop: 8, background: `${focusColor.bg}50`,
+                border: `1px dashed ${focusColor.border}50`, borderRadius: 8, color: focusColor.text,
+                fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all 0.2s"
+            }}>
+                <span style={{ fontSize: 16 }}>+</span> Adicionar nova tarefa
+            </button>
+        );
+    }
+
+    return (
+        <div style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+                <input type="text" value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={handleKeyDown}
+                    placeholder="Digite a nova tarefa..." autoFocus
+                    style={{
+                        flex: 1, padding: "10px 12px", border: `2px solid ${focusColor.border}`,
+                        borderRadius: 8, fontSize: 13, outline: "none", background: COLORS.card
+                    }} />
+                <button onClick={handleAdd} style={{
+                    padding: "10px 16px",
+                    background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                    border: "none", borderRadius: 8, color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                }}>
+                    Adicionar
+                </button>
+                <button onClick={() => { setNewTask(""); setIsAdding(false); }}
+                    style={{
+                        padding: "10px 12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`,
+                        borderRadius: 8, color: COLORS.textMuted, fontSize: 13, cursor: "pointer"
+                    }}>
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
+window.ProjectCard = ({ project, onClick, isSelected, progress }) => {
+    const focusColor = FOCUS_COLORS[project.focus] || FOCUS_COLORS["Educação"];
+    const statusColor = STATUS_COLORS[project.status] || STATUS_COLORS["Planejamento"];
+    const priorityColor = PRIORITY_COLORS[project.priority];
+
+    return (
+        <div onClick={() => onClick(project)}
+            style={{
+                background: COLORS.card, borderRadius: 14, padding: 20, cursor: "pointer",
+                border: isSelected ? `2px solid ${focusColor.border}` : `1px solid ${COLORS.border}`,
+                boxShadow: isSelected ? `0 0 0 3px ${focusColor.bg}, 0 4px 20px rgba(0,0,0,0.08)` : "0 1px 4px rgba(0,0,0,0.04)",
+                transition: "all 0.25s ease", position: "relative", overflow: "hidden"
+            }}>
+            <div style={{
+                position: "absolute", top: 0, left: 0, right: 0, height: 3,
+                background: `linear-gradient(90deg, ${focusColor.border}, ${COLORS.teal})`
+            }} />
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                        width: 44, height: 44, borderRadius: 10,
+                        background: `linear-gradient(135deg, ${focusColor.bg}, ${COLORS.lightTeal})`,
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22
+                    }}>
+                        {project.icon}
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: focusColor.text, marginBottom: 2, letterSpacing: "0.05em" }}>{project.id}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, lineHeight: 1.3 }}>{project.title}</div>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>{project.subtitle}</div>
+                    </div>
+                </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                <Badge colors={focusColor}>{project.focus}</Badge>
+                <Badge colors={statusColor}>{project.status}</Badge>
+                <Badge colors={priorityColor}>{project.priority}</Badge>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, color: COLORS.textMuted, fontWeight: 600 }}>Progresso</span>
+                    <span style={{ fontSize: 11, color: focusColor.text, fontWeight: 700 }}>{Math.round(progress)}%</span>
+                </div>
+                <ProgressBar value={progress} color={focusColor.border} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 11, color: COLORS.textMuted }}>
+                <span>👤 {project.responsible}</span>
+                <span>📅 {project.deadline}</span>
+            </div>
+        </div>
+    );
+};
+
+window.ProjectDetail = ({ project, onClose, tasks, onToggleTask, onAddTask, onDeleteTask }) => {
+    const focusColor = FOCUS_COLORS[project.focus] || FOCUS_COLORS["Educação"];
+    const statusColor = STATUS_COLORS[project.status] || STATUS_COLORS["Planejamento"];
+    const completedTasks = tasks.filter(t => t.done).length;
+    const totalTasks = tasks.length;
+    const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+    return (
+        <div style={{
+            background: COLORS.card, borderRadius: 16, overflow: "hidden",
+            border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 24px rgba(0,0,0,0.08)", animation: "slideIn 0.3s ease"
+        }}>
+            <div style={{
+                background: `linear-gradient(135deg, ${focusColor.border}15, ${COLORS.teal}10)`,
+                padding: "24px 28px", borderBottom: `1px solid ${COLORS.border}`
+            }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <div style={{
+                            width: 56, height: 56, borderRadius: 14,
+                            background: `linear-gradient(135deg, ${focusColor.bg}, white)`,
+                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32,
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                        }}>{project.icon}</div>
+                        <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: focusColor.text, marginBottom: 4, letterSpacing: "0.05em" }}>{project.id}</div>
+                            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: COLORS.text }}>{project.title}</h2>
+                            <p style={{ margin: "4px 0 0", fontSize: 13, color: COLORS.textMuted }}>{project.subtitle}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} style={{
+                        background: "none", border: `1px solid ${COLORS.border}`,
+                        borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 16, color: COLORS.textMuted
+                    }}>✕</button>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                    <Badge colors={focusColor}>{project.focus}</Badge>
+                    <Badge colors={statusColor}>{project.status}</Badge>
+                    <Badge colors={PRIORITY_COLORS[project.priority]}>{project.priority}</Badge>
+                </div>
+            </div>
+
+            <div style={{ padding: "20px 28px", maxHeight: "60vh", overflowY: "auto" }}>
+                <p style={{ fontSize: 14, lineHeight: 1.7, color: COLORS.text, margin: "0 0 20px" }}>{project.description}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+                    <div style={{ background: COLORS.lightTeal, borderRadius: 10, padding: 14, textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.green }}>{Math.round(progress)}%</div>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>Progresso</div>
+                    </div>
+                    <div style={{ background: COLORS.lightBlue, borderRadius: 10, padding: 14, textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.blue }}>{completedTasks}/{totalTasks}</div>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>Tarefas</div>
+                    </div>
+                    <div style={{ background: COLORS.lightGreen, borderRadius: 10, padding: 14, textAlign: "center" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.green }}>{project.deadline}</div>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>Prazo</div>
+                    </div>
+                </div>
+
+                {project.pillars && (
+                    <div style={{ marginBottom: 24 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 10 }}>📌 Pilares de Conteúdo</h3>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            {project.pillars.map((p, i) => (
+                                <div key={i} style={{ background: COLORS.bg, borderRadius: 10, padding: 12, border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ fontSize: 18 }}>{p.icon}</span>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginTop: 4 }}>{p.name}</div>
+                                    <div style={{ fontSize: 11, color: COLORS.textMuted }}>{p.format}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {project.groups && (
+                    <div style={{ marginBottom: 24 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 10 }}>📌 Grupos e IAs</h3>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {project.groups.map((g, i) => (
+                                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.bg, borderRadius: 8, padding: "8px 14px", border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{g.name}</span>
+                                    <span style={{ fontSize: 11, color: COLORS.textMuted, fontWeight: 500 }}>{g.group}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {project.blocks && (
+                    <div style={{ marginBottom: 24 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 10 }}>📌 Blocos do Curso</h3>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            {project.blocks.map((b, i) => (
+                                <div key={i} style={{ background: COLORS.bg, borderRadius: 10, padding: 12, border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ fontSize: 18 }}>{b.icon}</span>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.text, marginTop: 4 }}>{b.name}</div>
+                                    <div style={{ fontSize: 11, color: COLORS.textMuted }}>{b.aulas}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {project.principles && (
+                    <div style={{ marginBottom: 24 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 10 }}>📌 5 Princípios</h3>
+                        {project.principles.map((p, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: COLORS.bg, borderRadius: 8, padding: "8px 14px", marginBottom: 6, border: `1px solid ${COLORS.border}` }}>
+                                <span style={{ width: 22, height: 22, borderRadius: "50%", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, color: "white", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                                <span style={{ fontSize: 13, color: COLORS.text }}>{p}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>✅ Tarefas ({completedTasks}/{totalTasks})</h3>
+                    <div style={{ marginBottom: 12 }}><ProgressBar value={progress} color={focusColor.border} /></div>
+                    {tasks.map((task, i) => (
+                        <CheckItem key={i} text={task.text} done={task.done}
+                            onToggle={() => onToggleTask(project.id, i)} onDelete={() => onDeleteTask(project.id, i)} />
+                    ))}
+                    <AddTaskInput onAdd={(text) => onAddTask(project.id, text)} focusColor={focusColor} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ========== pages-login.js ==========
+// Login & Register Page - Glassmorphism Premium
+
+window.LoginPage = ({ onLoginSuccess }) => {
+    const [mode, setMode] = useState("login"); // "login" ou "register"
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [remember, setRemember] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+    const [fieldErrors, setFieldErrors] = useState({});
+
+    const validateEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+
+    const clearErrors = () => { setError(""); setSuccess(""); setFieldErrors({}); };
+
+    const switchMode = (newMode) => {
+        setMode(newMode); clearErrors();
+        setName(""); setEmail(""); setPassword(""); setConfirmPassword("");
+        setShowPassword(false);
+    };
+
+    const handleLogin = (e) => {
+        e.preventDefault(); clearErrors();
+        let errs = {};
+        if (!email.trim() || !validateEmail(email)) errs.email = "Insira um email válido";
+        if (!password || password.length < 8) errs.password = "Mínimo 8 caracteres";
+        if (Object.keys(errs).length > 0) { setFieldErrors(errs); return; }
+
+        setLoading(true);
+        authService.login(email, password, remember)
+            .then(() => onLoginSuccess())
+            .catch((err) => { setError(err.message); setLoading(false); });
+    };
+
+    const handleRegister = (e) => {
+        e.preventDefault(); clearErrors();
+        let errs = {};
+        if (!name.trim()) errs.name = "Insira seu nome";
+        if (!email.trim() || !validateEmail(email)) errs.email = "Insira um email válido";
+        if (!password || password.length < 8) errs.password = "Mínimo 8 caracteres";
+        if (password !== confirmPassword) errs.confirmPassword = "As senhas não coincidem";
+        if (Object.keys(errs).length > 0) { setFieldErrors(errs); return; }
+
+        setLoading(true);
+        authService.register(name.trim(), email.trim(), password)
+            .then(() => {
+                setLoading(false);
+                setSuccess("Conta criada com sucesso! Faça login para continuar.");
+                setTimeout(() => switchMode("login"), 1500);
+            })
+            .catch((err) => { setError(err.message); setLoading(false); });
+    };
+
+    // Estilos
+    const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.85)", marginBottom: 8, letterSpacing: "0.04em" };
+    const inputStyle = {
+        width: "100%", padding: "14px 16px", borderRadius: 12, fontSize: 14, outline: "none", boxSizing: "border-box",
+        background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", color: "white",
+        transition: "all 0.25s ease", backdropFilter: "blur(4px)"
+    };
+    const focusColor = "rgba(0,200,150,0.5)";
+    const errStyle = { fontSize: 11, color: "#FF6B6B", marginTop: 5, minHeight: 14 };
+    const inputWrap = { marginBottom: 16 };
+
+    const renderInput = (label, icon, type, value, onChange, placeholder, fieldKey, extra) => (
+        <div style={inputWrap}>
+            <label style={labelStyle}>{icon} {label}</label>
+            <div style={{ position: "relative" }}>
+                <input type={type} value={value} onChange={e => { onChange(e.target.value); setFieldErrors(f => ({ ...f, [fieldKey]: "" })); }}
+                    disabled={loading} placeholder={placeholder}
+                    onFocus={e => e.target.style.borderColor = focusColor}
+                    onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.18)"}
+                    style={{ ...inputStyle, paddingRight: extra ? 50 : 16, borderColor: fieldErrors[fieldKey] ? "rgba(255,80,80,0.6)" : "rgba(255,255,255,0.18)" }} />
+                {extra}
+            </div>
+            <div style={errStyle}>{fieldErrors[fieldKey]}</div>
+        </div>
+    );
+
+    const passwordToggle = (
+        <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex="-1"
+            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 16, padding: 4 }}>
+            {showPassword ? "🙈" : "👁️"}
+        </button>
+    );
+
+    return (
+        <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "linear-gradient(135deg, #0B1A2E 0%, #0D3B66 30%, #127475 60%, #0B8457 100%)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", overflow: "hidden"
+        }}>
+            {/* Blobs */}
+            <div style={{ position: "absolute", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,200,150,0.25), transparent 70%)", top: -80, left: -100, filter: "blur(60px)", animation: "blobFloat 8s ease-in-out infinite alternate" }} />
+            <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(30,100,200,0.2), transparent 70%)", bottom: -120, right: -120, filter: "blur(60px)", animation: "blobFloat 10s ease-in-out infinite alternate-reverse" }} />
+            <div style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,180,180,0.15), transparent 70%)", top: "40%", left: "60%", filter: "blur(50px)", animation: "blobFloat 6s ease-in-out infinite alternate" }} />
+
+            {/* Card Glassmorphism */}
+            <div key={mode} style={{
+                background: "rgba(255,255,255,0.07)", backdropFilter: "blur(24px) saturate(180%)", WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                borderRadius: 24, border: "1px solid rgba(255,255,255,0.12)",
+                boxShadow: "0 32px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+                padding: "36px 36px 32px", width: 420, maxWidth: "90vw", maxHeight: "92vh", overflowY: "auto",
+                animation: "loginCardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+                position: "relative", zIndex: 10
+            }}>
+                {/* Logo */}
+                <div style={{ textAlign: "center", marginBottom: 24 }}>
+                    <div style={{
+                        width: 100, height: 100, margin: "0 auto 14px",
+                        borderRadius: 20, overflow: "hidden",
+                        boxShadow: "0 8px 32px rgba(0,180,130,0.3), 0 2px 8px rgba(0,0,0,0.2)"
+                    }}>
+                        <img src="lias-logo-original.jpg" alt="LIAS Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+                    <h1 style={{ fontSize: 21, fontWeight: 800, color: "white", margin: "0 0 5px", letterSpacing: "0.02em" }}>
+                        {mode === "login" ? "Acessar Dashboard LIAS" : "Criar Conta"}
+                    </h1>
+                    <p style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", margin: 0 }}>
+                        {mode === "login" ? "Entre com suas credenciais para continuar" : "Preencha os dados abaixo para se cadastrar"}
+                    </p>
+                </div>
+
+                {/* Mensagens */}
+                {error && (
+                    <div style={{ background: "rgba(255,80,80,0.15)", border: "1px solid rgba(255,80,80,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, animation: "fadeIn 0.3s ease" }}>
+                        <span style={{ fontSize: 16 }}>⚠️</span>
+                        <span style={{ fontSize: 13, color: "#FF6B6B", fontWeight: 500 }}>{error}</span>
+                    </div>
+                )}
+                {success && (
+                    <div style={{ background: "rgba(0,200,150,0.15)", border: "1px solid rgba(0,200,150,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, animation: "fadeIn 0.3s ease" }}>
+                        <span style={{ fontSize: 16 }}>✅</span>
+                        <span style={{ fontSize: 13, color: "#00C896", fontWeight: 500 }}>{success}</span>
+                    </div>
+                )}
+
+                {/* Formulário LOGIN */}
+                {mode === "login" && (
+                    <form onSubmit={handleLogin}>
+                        {renderInput("Email", "📧", "email", email, setEmail, "admin@lias.com", "email")}
+                        {renderInput("Senha", "🔒", showPassword ? "text" : "password", password, setPassword, "••••••••", "password", passwordToggle)}
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+                                <div onClick={() => !loading && setRemember(!remember)} style={{
+                                    width: 20, height: 20, borderRadius: 6,
+                                    border: remember ? "none" : "2px solid rgba(255,255,255,0.25)",
+                                    background: remember ? "linear-gradient(135deg, #0B8457, #127475)" : "rgba(255,255,255,0.06)",
+                                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s", flexShrink: 0
+                                }}>
+                                    {remember && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 3.5L4 6.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                </div>
+                                Manter conectado
+                            </label>
+                            <button type="button" onClick={() => alert("Funcionalidade em desenvolvimento.")}
+                                style={{ background: "none", border: "none", color: "rgba(0,200,150,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 500, padding: 0 }}>
+                                Esqueci minha senha
+                            </button>
+                        </div>
+
+                        <button type="submit" disabled={loading}
+                            style={{
+                                width: "100%", padding: "15px", borderRadius: 14, border: "none",
+                                background: loading ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #0B8457, #127475, #0D3B66)",
+                                color: "white", fontSize: 15, fontWeight: 700, cursor: loading ? "wait" : "pointer",
+                                transition: "all 0.3s ease", boxShadow: loading ? "none" : "0 4px 24px rgba(0,180,130,0.35)"
+                            }}>
+                            {loading ? (
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                                    <div style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                                    Autenticando...
+                                </div>
+                            ) : "Entrar"}
+                        </button>
+
+                        <div style={{ textAlign: "center", marginTop: 20 }}>
+                            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Não tem uma conta? </span>
+                            <button type="button" onClick={() => switchMode("register")}
+                                style={{ background: "none", border: "none", color: "#00C896", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                                Cadastre-se
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* Formulário CADASTRO */}
+                {mode === "register" && (
+                    <form onSubmit={handleRegister}>
+                        {renderInput("Nome completo", "👤", "text", name, setName, "Seu nome", "name")}
+                        {renderInput("Email", "📧", "email", email, setEmail, "seu@email.com", "email")}
+                        {renderInput("Senha", "🔒", showPassword ? "text" : "password", password, setPassword, "Mínimo 8 caracteres", "password", passwordToggle)}
+                        {renderInput("Confirmar senha", "🔐", showPassword ? "text" : "password", confirmPassword, setConfirmPassword, "Repita a senha", "confirmPassword")}
+
+                        <button type="submit" disabled={loading}
+                            style={{
+                                width: "100%", padding: "15px", borderRadius: 14, border: "none",
+                                background: loading ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #0B8457, #127475, #0D3B66)",
+                                color: "white", fontSize: 15, fontWeight: 700, cursor: loading ? "wait" : "pointer",
+                                transition: "all 0.3s ease", marginTop: 4,
+                                boxShadow: loading ? "none" : "0 4px 24px rgba(0,180,130,0.35)"
+                            }}>
+                            {loading ? (
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                                    <div style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                                    Criando conta...
+                                </div>
+                            ) : "Criar Conta"}
+                        </button>
+
+                        <div style={{ textAlign: "center", marginTop: 20 }}>
+                            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Já tem uma conta? </span>
+                            <button type="button" onClick={() => switchMode("login")}
+                                style={{ background: "none", border: "none", color: "#00C896", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                                Fazer login
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* Rodapé */}
+                <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+                    LIAS • Liga de Inteligência Artificial na Saúde • 2026
+                </div>
+            </div>
+
+            {/* CSS Animations */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes loginCardIn {
+                    from { opacity: 0; transform: translateY(30px) scale(0.97); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+                @keyframes blobFloat {
+                    0% { transform: translate(0, 0) scale(1); }
+                    100% { transform: translate(30px, -20px) scale(1.1); }
+                }
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                input::placeholder { color: rgba(255,255,255,0.3); }
+                input:disabled { opacity: 0.5; cursor: not-allowed; }
+            `}} />
+        </div>
+    );
+};
+
+// ========== pages-timeline.js ==========
+
+const Calendar = ({ currentDate, onDateChange, events, onDayClick, selectedDate }) => {
+    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDayWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const getEventsForDay = (day) => {
+        const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return events.filter(e => ds >= e.startDate && ds <= e.endDate);
+    };
+    const isToday = (day) => { const t = new Date(); return t.getFullYear() === year && t.getMonth() === month && t.getDate() === day; };
+    const isSelected = (day) => selectedDate && selectedDate.getFullYear() === year && selectedDate.getMonth() === month && selectedDate.getDate() === day;
+
+    const days = [];
+    for (let i = 0; i < firstDayWeekday; i++) days.push(<div key={`e-${i}`} style={{ padding: 8 }} />);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayEvents = getEventsForDay(day);
+        days.push(
+            <div key={day} onClick={() => onDayClick(new Date(year, month, day))}
+                style={{
+                    padding: 4, minHeight: 70, border: `1px solid ${COLORS.border}`, borderRadius: 8, cursor: "pointer",
+                    background: isSelected(day) ? COLORS.lightTeal : isToday(day) ? COLORS.lightBlue : COLORS.card, transition: "all 0.2s"
+                }}>
+                <div style={{ fontSize: 12, fontWeight: isToday(day) ? 700 : 500, color: isToday(day) ? COLORS.blue : COLORS.text, marginBottom: 4, padding: "2px 6px" }}>{day}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {dayEvents.slice(0, 2).map((ev, i) => (
+                        <div key={i} style={{
+                            fontSize: 9, padding: "2px 4px", borderRadius: 4, background: EVENT_COLORS[ev.colorIndex % EVENT_COLORS.length].bg,
+                            color: EVENT_COLORS[ev.colorIndex % EVENT_COLORS.length].text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 500
+                        }}>
+                            {ev.title}
+                        </div>
+                    ))}
+                    {dayEvents.length > 2 && <div style={{ fontSize: 9, color: COLORS.textMuted, paddingLeft: 4 }}>+{dayEvents.length - 2} mais</div>}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 20, border: `1px solid ${COLORS.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <button onClick={() => onDateChange(new Date(year, month - 1, 1))}
+                    style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 14 }}>←</button>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>{monthNames[month]} {year}</h3>
+                <button onClick={() => onDateChange(new Date(year, month + 1, 1))}
+                    style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 14 }}>→</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 8 }}>
+                {dayNames.map(d => <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: COLORS.textMuted, padding: 8 }}>{d}</div>)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>{days}</div>
+        </div>
+    );
+};
+
+const EventFormModal = ({ isOpen, onClose, onSave, projects, editEvent, selectedDate }) => {
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [projectId, setProjectId] = useState("");
+    const [colorIndex, setColorIndex] = useState(0);
+
+    useEffect(() => {
+        if (editEvent) { setTitle(editEvent.title); setDescription(editEvent.description || ""); setStartDate(editEvent.startDate); setEndDate(editEvent.endDate); setProjectId(editEvent.projectId || ""); setColorIndex(editEvent.colorIndex); }
+        else if (selectedDate) { const ds = selectedDate.toISOString().split('T')[0]; setStartDate(ds); setEndDate(ds); }
+    }, [editEvent, selectedDate, isOpen]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!title.trim() || !startDate || !endDate) return;
+        onSave({ id: editEvent?.id || Date.now(), title: title.trim(), description: description.trim(), startDate, endDate, projectId, colorIndex });
+        setTitle(""); setDescription(""); setStartDate(""); setEndDate(""); setProjectId(""); setColorIndex(0);
+        onClose();
+    };
+
+    if (!isOpen) return null;
+    return (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, width: 480, maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{editEvent ? "Editar Evento" : "Novo Evento"}</h2>
+                    <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: COLORS.textMuted }}>×</button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Título *</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Aula inaugural" required
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Descrição</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Descrição do evento..." rows={3}
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none", resize: "vertical" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Início *</label>
+                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required
+                                style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" }} />
+                        </div>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Fim *</label>
+                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required min={startDate}
+                                style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" }} />
+                        </div>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Projeto</label>
+                        <select value={projectId} onChange={e => setProjectId(e.target.value)}
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none", background: COLORS.card }}>
+                            <option value="">Nenhum projeto</option>
+                            {projects.map(p => <option key={p.id} value={p.id}>{p.id} - {p.title}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ marginBottom: 24 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Cor</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                            {EVENT_COLORS.map((color, i) => (
+                                <div key={i} onClick={() => setColorIndex(i)}
+                                    style={{
+                                        width: 32, height: 32, borderRadius: 8, background: color.bg,
+                                        border: colorIndex === i ? `3px solid ${color.border}` : `1px solid ${color.border}`, cursor: "pointer", transition: "all 0.2s"
+                                    }} />
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <button type="button" onClick={onClose} style={{ flex: 1, padding: "12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: COLORS.textMuted }}>Cancelar</button>
+                        <button type="submit" style={{ flex: 1, padding: "12px", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: "white" }}>{editEvent ? "Salvar" : "Criar Evento"}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const EventsList = ({ events, projects, selectedDate, onEdit, onDelete }) => {
+    const formatDate = (ds) => new Date(ds + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    const filtered = selectedDate
+        ? events.filter(e => { const ds = selectedDate.toISOString().split('T')[0]; return ds >= e.startDate && ds <= e.endDate; })
+        : [...events].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    const getProject = (pid) => projects.find(p => p.id === pid);
+
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 20, border: `1px solid ${COLORS.border}` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 16 }}>
+                {selectedDate ? `Eventos em ${selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}` : "Próximos Eventos"}
+            </h3>
+            {filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", color: COLORS.textMuted }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
+                    <div style={{ fontSize: 14 }}>Nenhum evento {selectedDate ? "neste dia" : "cadastrado"}</div>
+                </div>
+            ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {filtered.map(event => {
+                        const color = EVENT_COLORS[event.colorIndex % EVENT_COLORS.length];
+                        const project = getProject(event.projectId);
+                        return (
+                            <div key={event.id} style={{ background: color.bg, borderRadius: 12, padding: 16, borderLeft: `4px solid ${color.border}` }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 600, color: color.text, marginBottom: 4 }}>{event.title}</div>
+                                        <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 6 }}>📅 {formatDate(event.startDate)}{event.startDate !== event.endDate && ` → ${formatDate(event.endDate)}`}</div>
+                                        {event.description && <div style={{ fontSize: 12, color: COLORS.text, marginBottom: 8 }}>{event.description}</div>}
+                                        {project && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: COLORS.card, padding: "4px 10px", borderRadius: 20, fontSize: 11, color: COLORS.textMuted }}><span>{project.icon}</span><span>{project.id}</span></div>}
+                                    </div>
+                                    <div style={{ display: "flex", gap: 4 }}>
+                                        <button onClick={() => onEdit(event)} style={{ background: COLORS.card, border: "none", borderRadius: 6, padding: "6px 8px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                        <button onClick={() => onDelete(event.id)} style={{ background: COLORS.card, border: "none", borderRadius: 6, padding: "6px 8px", cursor: "pointer", fontSize: 12 }}>🗑️</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
+window.TimelineView = ({ projects, events, onAddEvent, onEditEvent, onDeleteEvent }) => {
+    const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingEvent, setEditingEvent] = useState(null);
+
+    const handleSaveEvent = (data) => { editingEvent ? onEditEvent(data) : onAddEvent(data); setEditingEvent(null); };
+
+    return (
+        <div style={{ animation: "fadeIn 0.4s ease" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: 0 }}>Calendário de Eventos</h2>
+                    <p style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>{events.length} eventos cadastrados</p>
+                </div>
+                <button onClick={() => { setEditingEvent(null); setIsModalOpen(true); }}
+                    style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "10px 20px",
+                        background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                        border: "none", borderRadius: 10, color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                    }}>
+                    <span>+</span> Novo Evento
+                </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24 }}>
+                <Calendar currentDate={currentDate} onDateChange={setCurrentDate} events={events} onDayClick={setSelectedDate} selectedDate={selectedDate} />
+                <EventsList events={events} projects={projects} selectedDate={selectedDate} onEdit={(ev) => { setEditingEvent(ev); setIsModalOpen(true); }} onDelete={onDeleteEvent} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 24 }}>
+                {[
+                    { label: "Total de Eventos", value: events.length, icon: "📅", color: COLORS.green },
+                    { label: "Este Mês", value: events.filter(e => new Date(e.startDate).getMonth() === currentDate.getMonth()).length, icon: "📆", color: COLORS.teal },
+                    { label: "Multi-dia", value: events.filter(e => e.startDate !== e.endDate).length, icon: "📊", color: COLORS.blue },
+                    { label: "Com Projeto", value: events.filter(e => e.projectId).length, icon: "🔗", color: COLORS.cyan },
+                ].map((s, i) => (
+                    <div key={i} style={{ background: COLORS.card, borderRadius: 12, padding: 16, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 10, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{s.icon}</div>
+                        <div><div style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{s.value}</div><div style={{ fontSize: 11, color: COLORS.textMuted }}>{s.label}</div></div>
+                    </div>
+                ))}
+            </div>
+            <EventFormModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingEvent(null); }}
+                onSave={handleSaveEvent} projects={projects} editEvent={editingEvent} selectedDate={selectedDate} />
+        </div>
+    );
+};
+
+// ========== pages-metrics.js ==========
+// Metrics Page - Bar Chart, Pie Chart, Task Status, Ranking
+
+const BarChart = ({ projects, getProjectProgress }) => {
+    const barWidth = 60; const chartHeight = 300;
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 24 }}>📊 Progresso por Projeto</h3>
+            <div style={{ position: "relative", height: chartHeight + 60, overflowX: "auto" }}>
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 60, width: 40, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                    {[100, 75, 50, 25, 0].map(v => <div key={v} style={{ fontSize: 11, color: COLORS.textMuted, textAlign: "right", paddingRight: 8 }}>{v}%</div>)}
+                </div>
+                <div style={{ marginLeft: 40, display: "flex", alignItems: "flex-end", height: chartHeight, gap: 16, paddingBottom: 10, borderBottom: `1px solid ${COLORS.border}`, position: "relative" }}>
+                    {[0, 25, 50, 75, 100].map(v => <div key={v} style={{ position: "absolute", left: 0, right: 0, bottom: `${v}%`, borderTop: `1px dashed ${COLORS.border}`, zIndex: 0 }} />)}
+                    {projects.map((p, idx) => {
+                        const prog = getProjectProgress(p);
+                        const color = PROJECT_COLORS[idx % PROJECT_COLORS.length];
+                        return (
+                            <div key={p.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 1 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color, marginBottom: 4 }}>{Math.round(prog)}%</div>
+                                <div style={{
+                                    width: barWidth, height: (prog / 100) * (chartHeight - 20), background: `linear-gradient(180deg, ${color}, ${color}99)`,
+                                    borderRadius: "8px 8px 0 0", transition: "height 0.5s ease", minHeight: 4
+                                }} />
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={{ marginLeft: 40, display: "flex", gap: 16, marginTop: 12 }}>
+                    {projects.map((p, idx) => (
+                        <div key={p.id} style={{ width: barWidth, textAlign: "center" }}>
+                            <div style={{ fontSize: 18, marginBottom: 4 }}>{p.icon}</div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: PROJECT_COLORS[idx % PROJECT_COLORS.length] }}>{p.id}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PieChart = ({ projects, getProjectProgress }) => {
+    const size = 280; const center = size / 2; const radius = 100; const innerRadius = 60;
+    const projectData = projects.map((p, i) => ({ ...p, totalTasks: p.tasks.length, completedTasks: p.tasks.filter(t => t.done).length, color: PROJECT_COLORS[i % PROJECT_COLORS.length] }));
+    const totalAllTasks = projectData.reduce((s, p) => s + p.totalTasks, 0);
+
+    let currentAngle = -90;
+    const slices = projectData.map(p => {
+        const pct = totalAllTasks > 0 ? (p.totalTasks / totalAllTasks) * 100 : 0;
+        const angle = (pct / 100) * 360;
+        const startAngle = currentAngle; currentAngle += angle;
+        const s1 = (startAngle * Math.PI) / 180; const s2 = ((startAngle + angle) * Math.PI) / 180;
+        const large = angle > 180 ? 1 : 0;
+        const path = `M ${center + radius * Math.cos(s1)} ${center + radius * Math.sin(s1)} A ${radius} ${radius} 0 ${large} 1 ${center + radius * Math.cos(s2)} ${center + radius * Math.sin(s2)} L ${center + innerRadius * Math.cos(s2)} ${center + innerRadius * Math.sin(s2)} A ${innerRadius} ${innerRadius} 0 ${large} 0 ${center + innerRadius * Math.cos(s1)} ${center + innerRadius * Math.sin(s1)} Z`;
+        return { ...p, path, pct };
+    });
+
+    const totalCompleted = projectData.reduce((s, p) => s + p.completedTasks, 0);
+    const overall = totalAllTasks > 0 ? Math.round((totalCompleted / totalAllTasks) * 100) : 0;
+
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 24 }}>🥧 Distribuição de Tarefas</h3>
+            <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
+                <div style={{ position: "relative" }}>
+                    <svg width={size} height={size}>
+                        <circle cx={center} cy={center} r={radius} fill={COLORS.bg} stroke={COLORS.border} strokeWidth="1" />
+                        {slices.map(sl => <path key={sl.id} d={sl.path} fill={sl.color} stroke={COLORS.card} strokeWidth="2" />)}
+                        <circle cx={center} cy={center} r={innerRadius} fill={COLORS.card} />
+                        <text x={center} y={center - 8} textAnchor="middle" style={{ fontSize: 28, fontWeight: 800, fill: COLORS.text }}>{overall}%</text>
+                        <text x={center} y={center + 16} textAnchor="middle" style={{ fontSize: 11, fill: COLORS.textMuted }}>Progresso Geral</text>
+                    </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        {projectData.map(p => (
+                            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: COLORS.bg, borderRadius: 8, border: `1px solid ${COLORS.border}` }}>
+                                <div style={{ width: 12, height: 12, borderRadius: 4, background: p.color, flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.text, display: "flex", alignItems: "center", gap: 4 }}><span>{p.icon}</span><span>{p.id}</span></div>
+                                    <div style={{ fontSize: 10, color: COLORS.textMuted }}>{p.completedTasks}/{p.totalTasks} tarefas</div>
+                                </div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: p.color }}>{Math.round(getProjectProgress(p))}%</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TaskStatusChart = ({ projects }) => {
+    const total = projects.reduce((s, p) => s + p.tasks.length, 0);
+    const done = projects.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0);
+    const pending = total - done;
+    const dp = total > 0 ? (done / total) * 100 : 0;
+    const pp = total > 0 ? (pending / total) * 100 : 0;
+
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 24 }}>✅ Status Geral das Tarefas</h3>
+            <div style={{ display: "flex", gap: 24, marginBottom: 24 }}>
+                <div style={{ flex: 1, textAlign: "center", padding: 20, background: COLORS.lightGreen, borderRadius: 12 }}>
+                    <div style={{ fontSize: 36, fontWeight: 800, color: COLORS.green }}>{done}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>Concluídas</div>
+                </div>
+                <div style={{ flex: 1, textAlign: "center", padding: 20, background: COLORS.lightBlue, borderRadius: 12 }}>
+                    <div style={{ fontSize: 36, fontWeight: 800, color: COLORS.blue }}>{pending}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>Pendentes</div>
+                </div>
+                <div style={{ flex: 1, textAlign: "center", padding: 20, background: COLORS.bg, borderRadius: 12 }}>
+                    <div style={{ fontSize: 36, fontWeight: 800, color: COLORS.text }}>{total}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>Total</div>
+                </div>
+            </div>
+            <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: COLORS.textMuted }}>Distribuição</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.green }}>{Math.round(dp)}% concluído</span>
+                </div>
+                <div style={{ display: "flex", height: 24, borderRadius: 12, overflow: "hidden", background: COLORS.bg }}>
+                    <div style={{ width: `${dp}%`, background: `linear-gradient(90deg, ${COLORS.green}, ${COLORS.teal})`, transition: "width 0.5s ease", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {dp > 15 && <span style={{ fontSize: 10, color: "white", fontWeight: 600 }}>{Math.round(dp)}%</span>}
+                    </div>
+                    <div style={{ width: `${pp}%`, background: COLORS.lightBlue, transition: "width 0.5s ease", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {pp > 15 && <span style={{ fontSize: 10, color: COLORS.blue, fontWeight: 600 }}>{Math.round(pp)}%</span>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ProjectRankingTable = ({ projects, getProjectProgress }) => {
+    const sorted = [...projects].sort((a, b) => getProjectProgress(b) - getProjectProgress(a));
+    return (
+        <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 24 }}>🏆 Ranking de Projetos</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {sorted.map((p, idx) => {
+                    const prog = getProjectProgress(p);
+                    const color = PROJECT_COLORS[projects.findIndex(pp => pp.id === p.id) % PROJECT_COLORS.length];
+                    const done = p.tasks.filter(t => t.done).length;
+                    return (
+                        <div key={p.id} style={{
+                            display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+                            background: idx === 0 ? COLORS.lightGreen : COLORS.bg, borderRadius: 10,
+                            border: idx === 0 ? `2px solid ${COLORS.green}` : `1px solid ${COLORS.border}`
+                        }}>
+                            <div style={{
+                                width: 28, height: 28, borderRadius: "50%",
+                                background: idx === 0 ? `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})` : idx < 3 ? COLORS.lightBlue : COLORS.bg,
+                                color: idx === 0 ? "white" : COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700
+                            }}>{idx + 1}</div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 16 }}>{p.icon}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{p.id}</span>
+                                    <span style={{ fontSize: 12, color: COLORS.textMuted }}>- {p.title}</span>
+                                </div>
+                            </div>
+                            <div style={{ fontSize: 11, color: COLORS.textMuted, marginRight: 16 }}>{done}/{p.tasks.length}</div>
+                            <div style={{ width: 120 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color }}>{Math.round(prog)}%</span>
+                                </div>
+                                <div style={{ height: 6, background: COLORS.border, borderRadius: 3 }}>
+                                    <div style={{ width: `${prog}%`, height: "100%", background: `linear-gradient(90deg, ${color}, ${color}99)`, borderRadius: 3, transition: "width 0.5s ease" }} />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+window.MetricsView = ({ projects, getProjectProgress }) => {
+    const total = projects.reduce((s, p) => s + p.tasks.length, 0);
+    const done = projects.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0);
+    const avg = Math.round(projects.reduce((s, p) => s + getProjectProgress(p), 0) / projects.length);
+
+    return (
+        <div style={{ animation: "fadeIn 0.4s ease" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+                {[
+                    { label: "Total de Projetos", value: projects.length, icon: "📋", color: COLORS.green },
+                    { label: "Progresso Médio", value: `${avg}%`, icon: "📈", color: COLORS.teal },
+                    { label: "Tarefas Concluídas", value: done, icon: "✅", color: COLORS.cyan },
+                    { label: "Tarefas Pendentes", value: total - done, icon: "⏳", color: COLORS.blue },
+                ].map((s, i) => (
+                    <div key={i} style={{ background: COLORS.card, borderRadius: 14, padding: "20px 24px", border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ width: 52, height: 52, borderRadius: 12, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{s.icon}</div>
+                        <div><div style={{ fontSize: 28, fontWeight: 800, color: COLORS.text }}>{s.value}</div><div style={{ fontSize: 12, color: COLORS.textMuted }}>{s.label}</div></div>
+                    </div>
+                ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+                <PieChart projects={projects} getProjectProgress={getProjectProgress} />
+                <TaskStatusChart projects={projects} />
+            </div>
+            <div style={{ marginBottom: 24 }}><BarChart projects={projects} getProjectProgress={getProjectProgress} /></div>
+            <ProjectRankingTable projects={projects} getProjectProgress={getProjectProgress} />
+        </div>
+    );
+};
+
+// ========== pages-teams.js ==========
+
+const MemberFormModal = ({ isOpen, onClose, onSave, projects, editMember }) => {
+    const [name, setName] = useState("");
+    const [role, setRole] = useState("Membro");
+    const [icon, setIcon] = useState("👤");
+    const [projectIds, setProjectIds] = useState([]);
+
+    useEffect(() => {
+        if (editMember) { setName(editMember.name); setRole(editMember.role); setIcon(editMember.icon); setProjectIds(editMember.projectIds || []); }
+        else { setName(""); setRole("Membro"); setIcon("👤"); setProjectIds([]); }
+    }, [editMember, isOpen]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault(); if (!name.trim()) return;
+        onSave({ id: editMember?.id || Date.now(), name: name.trim(), role, icon, projectIds, activities: editMember?.activities || [] });
+        onClose();
+    };
+
+    const toggleProject = (pid) => setProjectIds(prev => prev.includes(pid) ? prev.filter(x => x !== pid) : [...prev, pid]);
+
+    if (!isOpen) return null;
+    return (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, width: 480, maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{editMember ? "Editar Membro" : "Novo Membro"}</h2>
+                    <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: COLORS.textMuted }}>×</button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Nome *</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="Nome completo"
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Cargo</label>
+                        <select value={role} onChange={e => setRole(e.target.value)}
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none", background: COLORS.card }}>
+                            <option value="Membro">Membro</option>
+                            <option value="Coordenador">Coordenador</option>
+                            <option value="Líder">Líder</option>
+                            <option value="Orientador">Orientador</option>
+                        </select>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Avatar</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {MEMBER_ICONS.map((ic, i) => (
+                                <div key={i} onClick={() => setIcon(ic)} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", background: icon === ic ? COLORS.lightTeal : COLORS.bg, border: icon === ic ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}` }}>{ic}</div>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Projetos</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {projects.map(p => (
+                                <div key={p.id} onClick={() => toggleProject(p.id)} style={{
+                                    padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                                    background: projectIds.includes(p.id) ? COLORS.lightTeal : COLORS.bg,
+                                    border: projectIds.includes(p.id) ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+                                    color: projectIds.includes(p.id) ? COLORS.teal : COLORS.textMuted
+                                }}>{p.icon} {p.id}</div>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+                        <button type="button" onClick={onClose} style={{ flex: 1, padding: "12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: COLORS.textMuted }}>Cancelar</button>
+                        <button type="submit" style={{ flex: 1, padding: "12px", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: "white" }}>Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const ActivityFormModal = ({ isOpen, onClose, onSave, member, projects, editActivity }) => {
+    const [text, setText] = useState("");
+    const [projectId, setProjectId] = useState("");
+
+    useEffect(() => {
+        if (isOpen) {
+            if (editActivity) { setText(editActivity.text); setProjectId(editActivity.projectId || ""); }
+            else { setText(""); setProjectId(member?.projectIds?.[0] || ""); }
+        }
+    }, [isOpen, editActivity]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault(); if (!text.trim()) return;
+        if (editActivity) {
+            onSave(member.id, { ...editActivity, text: text.trim(), projectId });
+        } else {
+            onSave(member.id, { id: Date.now(), text: text.trim(), projectId, done: false });
+        }
+        onClose();
+    };
+
+    if (!isOpen) return null;
+    return (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, width: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{editActivity ? "Editar Atividade" : "Nova Atividade"}</h2>
+                    <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: COLORS.textMuted }}>×</button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Atividade *</label>
+                        <input type="text" value={text} onChange={e => setText(e.target.value)} required placeholder="Descrição da atividade" autoFocus
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" }} />
+                    </div>
+                    <div style={{ marginBottom: 24 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>Projeto</label>
+                        <select value={projectId} onChange={e => setProjectId(e.target.value)}
+                            style={{ width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none", background: COLORS.card }}>
+                            <option value="">Sem vínculo</option>
+                            {projects.filter(p => member?.projectIds?.includes(p.id)).map(p => <option key={p.id} value={p.id}>{p.icon} {p.id} - {p.title}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <button type="button" onClick={onClose} style={{ flex: 1, padding: "12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: COLORS.textMuted }}>Cancelar</button>
+                        <button type="submit" style={{ flex: 1, padding: "12px", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: "white" }}>{editActivity ? "Salvar" : "Adicionar"}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const MemberCard = ({ member, projects, onClick }) => {
+    const doneAct = member.activities.filter(a => a.done).length;
+    const totalAct = member.activities.length;
+    const prog = totalAct > 0 ? (doneAct / totalAct) * 100 : 0;
+
+    return (
+        <div onClick={() => onClick(member)} style={{
+            background: COLORS.card, borderRadius: 14, padding: 20, cursor: "pointer",
+            border: `1px solid ${COLORS.border}`, transition: "all 0.25s ease", boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
+        }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <div style={{
+                    width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${COLORS.lightTeal}, ${COLORS.lightBlue})`,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24
+                }}>{member.icon}</div>
+                <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{member.name}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>{member.role}</div>
+                </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                {member.projectIds.map(pid => {
+                    const p = projects.find(pp => pp.id === pid);
+                    return p ? <span key={pid} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 12, background: COLORS.bg, color: COLORS.textMuted, border: `1px solid ${COLORS.border}` }}>{p.icon} {pid}</span> : null;
+                })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: COLORS.textMuted }}>Atividades</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.teal }}>{doneAct}/{totalAct}</span>
+            </div>
+            <ProgressBar value={prog} />
+        </div>
+    );
+};
+
+const MemberFullPage = ({ member, projects, onBack, onToggleActivity, onAddActivity, onDeleteActivity, onEditActivity, onEditMember, onDeleteMember }) => {
+    const doneAct = member.activities.filter(a => a.done).length;
+    const totalAct = member.activities.length;
+    const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+    const [editingActivity, setEditingActivity] = useState(null);
+
+    const handleSaveActivity = (mid, actData) => {
+        if (editingActivity) {
+            onEditActivity(mid, actData);
+        } else {
+            onAddActivity(mid, actData);
+        }
+        setEditingActivity(null);
+    };
+
+    return (
+        <div style={{ animation: "slideIn 0.3s ease" }}>
+            <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", color: COLORS.textMuted, fontSize: 13, cursor: "pointer", marginBottom: 20, padding: 0 }}>← Voltar para a equipe</button>
+
+            {/* Header com botões editar/excluir */}
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, border: `1px solid ${COLORS.border}`, marginBottom: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{
+                            width: 72, height: 72, borderRadius: 18, background: `linear-gradient(135deg, ${COLORS.lightTeal}, ${COLORS.lightBlue})`,
+                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36
+                        }}>{member.icon}</div>
+                        <div>
+                            <h2 style={{ fontSize: 22, fontWeight: 800, color: COLORS.text, margin: 0 }}>{member.name}</h2>
+                            <p style={{ fontSize: 14, color: COLORS.textMuted, margin: "4px 0" }}>{member.role}</p>
+                            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                                {member.projectIds.map(pid => {
+                                    const p = projects.find(pp => pp.id === pid);
+                                    const fc = FOCUS_COLORS[p?.focus] || FOCUS_COLORS["Educação"];
+                                    return p ? <Badge key={pid} colors={fc}>{p.icon} {pid}</Badge> : null;
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => onEditMember(member)} title="Editar membro" style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.2s" }}>✏️</button>
+                        <button onClick={() => { if (confirm("Tem certeza que deseja excluir este membro?")) { onDeleteMember(member.id); onBack(); } }} title="Excluir membro" style={{ background: "#FFE8E8", border: `1px solid #FFCACA`, borderRadius: 10, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.2s" }}>🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
+                <div style={{ background: COLORS.lightTeal, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.green }}>{member.projectIds.length}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Projetos</div>
+                </div>
+                <div style={{ background: COLORS.lightBlue, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.blue }}>{doneAct}/{totalAct}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Atividades</div>
+                </div>
+                <div style={{ background: COLORS.lightGreen, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.green }}>{totalAct > 0 ? Math.round((doneAct / totalAct) * 100) : 0}%</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Progresso</div>
+                </div>
+            </div>
+
+            {/* Atividades com edição */}
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Atividades ({doneAct}/{totalAct})</h3>
+                    <button onClick={() => { setEditingActivity(null); setIsActivityModalOpen(true); }}
+                        style={{
+                            display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+                            background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                            border: "none", borderRadius: 8, color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer"
+                        }}>
+                        <span>+</span> Nova Atividade
+                    </button>
+                </div>
+                <div style={{ marginBottom: 12 }}><ProgressBar value={totalAct > 0 ? (doneAct / totalAct) * 100 : 0} /></div>
+                {member.activities.map((act, i) => {
+                    const p = projects.find(pp => pp.id === act.projectId);
+                    return (
+                        <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                            <div onClick={() => onToggleActivity(member.id, act.id)} style={{
+                                width: 24, height: 24, borderRadius: 6,
+                                border: act.done ? "none" : `2px solid ${COLORS.border}`,
+                                background: act.done ? `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})` : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0
+                            }}>
+                                {act.done && <svg width="13" height="10" viewBox="0 0 11 8" fill="none"><path d="M1 3.5L4 6.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 14, color: act.done ? COLORS.textMuted : COLORS.text, textDecoration: act.done ? "line-through" : "none" }}>{act.text}</div>
+                                {p && <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>{p.icon} {p.id} - {p.title}</div>}
+                            </div>
+                            <div style={{ display: "flex", gap: 4 }}>
+                                <button onClick={() => { setEditingActivity(act); setIsActivityModalOpen(true); }} style={{ background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 14, opacity: 0.5, padding: "2px 4px" }} title="Editar atividade">✏️</button>
+                                <button onClick={() => onDeleteActivity(member.id, act.id)} style={{ background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 16, opacity: 0.5, padding: "2px 4px" }} title="Excluir atividade">×</button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            <ActivityFormModal isOpen={isActivityModalOpen} onClose={() => { setIsActivityModalOpen(false); setEditingActivity(null); }}
+                onSave={handleSaveActivity} member={member} projects={projects} editActivity={editingActivity} />
+        </div>
+    );
+};
+
+window.TeamsView = ({ projects, members, onToggleActivity, onAddMember, onEditMember, onDeleteMember, onAddActivity, onDeleteActivity, onEditActivity }) => {
+    const [selectedMember, setSelectedMember] = useState(null);
+    const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+    const [editingMember, setEditingMember] = useState(null);
+
+    const currentMember = members.find(m => m.id === selectedMember);
+
+    const handleEditMember = (member) => {
+        setEditingMember(member);
+        setIsMemberModalOpen(true);
+    };
+
+    const handleSaveMember = (data) => {
+        if (editingMember) { onEditMember(data); } else { onAddMember(data); }
+        setIsMemberModalOpen(false);
+        setEditingMember(null);
+    };
+
+    if (currentMember) {
+        return (
+            <div>
+                <MemberFullPage member={currentMember} projects={projects} onBack={() => setSelectedMember(null)}
+                    onToggleActivity={onToggleActivity}
+                    onAddActivity={onAddActivity}
+                    onDeleteActivity={onDeleteActivity}
+                    onEditActivity={onEditActivity}
+                    onEditMember={handleEditMember}
+                    onDeleteMember={onDeleteMember}
+                />
+                <MemberFormModal isOpen={isMemberModalOpen} onClose={() => { setIsMemberModalOpen(false); setEditingMember(null); }}
+                    onSave={handleSaveMember} projects={projects} editMember={editingMember} />
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ animation: "fadeIn 0.4s ease" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: 0 }}>Equipe LIAS</h2>
+                    <p style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>{members.length} membros ativos</p>
+                </div>
+                <button onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
+                    style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "10px 20px",
+                        background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                        border: "none", borderRadius: 10, color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                    }}>
+                    <span>+</span> Novo Membro
+                </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                {members.map(m => <MemberCard key={m.id} member={m} projects={projects} onClick={(m) => setSelectedMember(m.id)} />)}
+            </div>
+            <MemberFormModal isOpen={isMemberModalOpen} onClose={() => { setIsMemberModalOpen(false); setEditingMember(null); }}
+                onSave={handleSaveMember} projects={projects} editMember={editingMember} />
+        </div>
+    );
+};
+
+// ========== pages-projects.js ==========
+// Projects Page - Dashboard view with full CRUD
+
+const ProjectFormModal = ({ isOpen, onClose, onSave, editProject }) => {
+    const [title, setTitle] = useState("");
+    const [subtitle, setSubtitle] = useState("");
+    const [icon, setIcon] = useState("📋");
+    const [description, setDescription] = useState("");
+    const [focus, setFocus] = useState("Comunicação");
+    const [status, setStatus] = useState("Planejamento");
+    const [priority, setPriority] = useState("Normal");
+    const [responsible, setResponsible] = useState("");
+    const [deadline, setDeadline] = useState("");
+
+    const projectIcons = ["📱", "🔍", "🤖", "🏥", "⚖️", "📋", "🎙️", "🎓", "🧞", "💡", "📊", "🎯", "🔬", "💻", "🌐", "📝"];
+    const focusOptions = Object.keys(FOCUS_COLORS);
+    const statusOptions = Object.keys(STATUS_COLORS);
+    const priorityOptions = Object.keys(PRIORITY_COLORS);
+
+    useEffect(() => {
+        if (editProject) {
+            setTitle(editProject.title); setSubtitle(editProject.subtitle || "");
+            setIcon(editProject.icon); setDescription(editProject.description || "");
+            setFocus(editProject.focus); setStatus(editProject.status);
+            setPriority(editProject.priority); setResponsible(editProject.responsible || "");
+            setDeadline(editProject.deadline || "");
+        } else {
+            setTitle(""); setSubtitle(""); setIcon("📋"); setDescription("");
+            setFocus("Comunicação"); setStatus("Planejamento"); setPriority("Normal");
+            setResponsible(""); setDeadline("");
+        }
+    }, [editProject, isOpen]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault(); if (!title.trim()) return;
+        const data = {
+            ...(editProject || {}),
+            id: editProject?.id || `P${Date.now()}`,
+            title: title.trim(), subtitle: subtitle.trim(), icon, description: description.trim(),
+            focus, status, priority, responsible: responsible.trim(), deadline: deadline.trim(),
+            tasks: editProject?.tasks || [],
+        };
+        // preserve any special fields from the original project
+        if (editProject) {
+            ["pillars", "groups", "blocks", "months", "acts", "workflow", "phases", "tools", "principles", "chapters", "campaignPhases"].forEach(k => {
+                if (editProject[k]) data[k] = editProject[k];
+            });
+        }
+        onSave(data);
+        onClose();
+    };
+
+    if (!isOpen) return null;
+
+    const inputStyle = { width: "100%", padding: "12px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, outline: "none" };
+    const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 6 };
+
+    return (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, width: 540, maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{editProject ? "Editar Projeto" : "Novo Projeto"}</h2>
+                    <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: COLORS.textMuted }}>×</button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>Ícone</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {projectIcons.map((ic, i) => (
+                                <div key={i} onClick={() => setIcon(ic)} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", background: icon === ic ? COLORS.lightTeal : COLORS.bg, border: icon === ic ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}` }}>{ic}</div>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>Título *</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} required placeholder="Nome do projeto" style={inputStyle} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>Subtítulo</label>
+                        <input type="text" value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Breve descrição" style={inputStyle} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>Descrição</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Descrição detalhada do projeto..." rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+                        <div>
+                            <label style={labelStyle}>Foco</label>
+                            <select value={focus} onChange={e => setFocus(e.target.value)} style={{ ...inputStyle, background: COLORS.card }}>
+                                {focusOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Status</label>
+                            <select value={status} onChange={e => setStatus(e.target.value)} style={{ ...inputStyle, background: COLORS.card }}>
+                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Prioridade</label>
+                            <select value={priority} onChange={e => setPriority(e.target.value)} style={{ ...inputStyle, background: COLORS.card }}>
+                                {priorityOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+                        <div>
+                            <label style={labelStyle}>Responsável</label>
+                            <input type="text" value={responsible} onChange={e => setResponsible(e.target.value)} placeholder="Ex: Equipe Técnica" style={inputStyle} />
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Prazo</label>
+                            <input type="text" value={deadline} onChange={e => setDeadline(e.target.value)} placeholder="Ex: 4 Meses" style={inputStyle} />
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <button type="button" onClick={onClose} style={{ flex: 1, padding: "12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: COLORS.textMuted }}>Cancelar</button>
+                        <button type="submit" style={{ flex: 1, padding: "12px", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", color: "white" }}>{editProject ? "Salvar" : "Criar Projeto"}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const ProjectFullPage = ({ project, onBack, tasks, onToggleTask, onAddTask, onDeleteTask, onEditTask, onEditProject, onDeleteProject }) => {
+    const focusColor = FOCUS_COLORS[project.focus] || FOCUS_COLORS["Educação"];
+    const statusColor = STATUS_COLORS[project.status] || STATUS_COLORS["Planejamento"];
+    const completedTasks = tasks.filter(t => t.done).length;
+    const totalTasks = tasks.length;
+    const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+    const [editingTaskIdx, setEditingTaskIdx] = useState(null);
+    const [editingTaskText, setEditingTaskText] = useState("");
+
+    const startEditTask = (idx) => { setEditingTaskIdx(idx); setEditingTaskText(tasks[idx].text); };
+    const saveEditTask = () => { if (editingTaskText.trim() && editingTaskIdx !== null) { onEditTask(project.id, editingTaskIdx, editingTaskText.trim()); } setEditingTaskIdx(null); setEditingTaskText(""); };
+    const cancelEditTask = () => { setEditingTaskIdx(null); setEditingTaskText(""); };
+
+    const sections = [];
+    if (project.pillars) sections.push({ title: "📌 Pilares de Conteúdo", items: project.pillars, type: "pillars" });
+    if (project.groups) sections.push({ title: "📌 Grupos e IAs", items: project.groups, type: "groups" });
+    if (project.blocks) sections.push({ title: "📌 Blocos do Curso", items: project.blocks, type: "blocks" });
+    if (project.months) sections.push({ title: "📌 Cronograma Mensal", items: project.months, type: "months" });
+    if (project.acts) sections.push({ title: "📌 Estrutura do Evento", items: project.acts, type: "acts" });
+    if (project.workflow) sections.push({ title: "📌 Fluxo de Trabalho", items: project.workflow, type: "workflow" });
+    if (project.phases) sections.push({ title: "📌 Fases do Programa", items: project.phases, type: "phases" });
+    if (project.tools) sections.push({ title: "🛠️ Ferramentas", items: project.tools, type: "tools" });
+    if (project.principles) sections.push({ title: "📌 5 Princípios", items: project.principles, type: "principles" });
+    if (project.chapters) sections.push({ title: "📖 Capítulos do E-book", items: project.chapters, type: "chapters" });
+    if (project.campaignPhases) sections.push({ title: "📌 Fases da Campanha", items: project.campaignPhases, type: "campaignPhases" });
+
+    return (
+        <div style={{ animation: "slideIn 0.3s ease" }}>
+            <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", color: COLORS.textMuted, fontSize: 13, cursor: "pointer", marginBottom: 20, padding: 0 }}>← Voltar para o dashboard</button>
+
+            {/* Header Card */}
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 28, border: `1px solid ${COLORS.border}`, marginBottom: 24, position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${focusColor.border}, ${COLORS.teal})` }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ width: 72, height: 72, borderRadius: 18, background: `linear-gradient(135deg, ${focusColor.bg}, ${COLORS.lightTeal})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>{project.icon}</div>
+                        <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: focusColor.text, marginBottom: 4, letterSpacing: "0.05em" }}>{project.id}</div>
+                            <h2 style={{ fontSize: 22, fontWeight: 800, color: COLORS.text, margin: 0 }}>{project.title}</h2>
+                            <p style={{ fontSize: 14, color: COLORS.textMuted, margin: "4px 0" }}>{project.subtitle}</p>
+                            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <Badge colors={focusColor}>{project.focus}</Badge>
+                                <Badge colors={statusColor}>{project.status}</Badge>
+                                <Badge colors={PRIORITY_COLORS[project.priority]}>{project.priority}</Badge>
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => onEditProject(project)} title="Editar projeto" style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.2s" }}>✏️</button>
+                        <button onClick={() => { if (confirm("Tem certeza que deseja excluir este projeto?")) { onDeleteProject(project.id); onBack(); } }} title="Excluir projeto" style={{ background: "#FFE8E8", border: `1px solid #FFCACA`, borderRadius: 10, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.2s" }}>🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stat Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
+                <div style={{ background: COLORS.lightTeal, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.green }}>{Math.round(progress)}%</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Progresso</div>
+                </div>
+                <div style={{ background: COLORS.lightBlue, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.blue }}>{completedTasks}/{totalTasks}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Tarefas</div>
+                </div>
+                <div style={{ background: COLORS.lightGreen, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.green }}>{project.deadline}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>Prazo</div>
+                </div>
+            </div>
+
+            {/* Descrição */}
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}`, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>📝 Sobre o Projeto</h3>
+                <p style={{ fontSize: 14, lineHeight: 1.8, color: COLORS.text, margin: 0 }}>{project.description}</p>
+                <div style={{ display: "flex", gap: 16, marginTop: 16, fontSize: 12, color: COLORS.textMuted }}>
+                    <span>👤 {project.responsible}</span>
+                    <span>📅 {project.deadline}</span>
+                </div>
+            </div>
+
+            {/* Seções especiais */}
+            {sections.map((section, si) => (
+                <div key={si} style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}`, marginBottom: 24 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 16 }}>{section.title}</h3>
+                    {["pillars", "blocks", "months", "phases", "acts", "workflow", "campaignPhases"].includes(section.type) && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            {section.items.map((item, i) => (
+                                <div key={i} style={{ background: COLORS.bg, borderRadius: 10, padding: 14, border: `1px solid ${COLORS.border}` }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                        <span style={{ fontSize: 20 }}>{item.icon}</span>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{item.name}</div>
+                                    </div>
+                                    {item.format && <div style={{ fontSize: 11, color: COLORS.textMuted }}>📎 {item.format}</div>}
+                                    {item.desc && <div style={{ fontSize: 11, color: COLORS.textMuted }}>{item.desc}</div>}
+                                    {item.aulas && <div style={{ fontSize: 11, color: COLORS.textMuted }}>📚 {item.aulas}</div>}
+                                    {item.weeks && <div style={{ fontSize: 11, color: COLORS.textMuted }}>📅 {item.weeks}</div>}
+                                    {item.duration && <div style={{ fontSize: 11, color: COLORS.textMuted }}>⏱️ {item.duration}</div>}
+                                    {item.function && <div style={{ fontSize: 11, color: COLORS.textMuted }}>🔧 {item.function}</div>}
+                                    {item.topics && (
+                                        <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+                                            {item.topics.map((t, ti) => <div key={ti} style={{ fontSize: 11, color: COLORS.textMuted, paddingLeft: 4 }}>• {t}</div>)}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {section.type === "groups" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {section.items.map((g, i) => (
+                                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.bg, borderRadius: 10, padding: "12px 16px", border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{g.name}</span>
+                                    <span style={{ fontSize: 12, color: COLORS.textMuted, fontWeight: 500 }}>{g.group}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {section.type === "tools" && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            {section.items.map((tool, i) => (
+                                <div key={i} style={{ background: COLORS.bg, borderRadius: 10, padding: 14, border: `1px solid ${COLORS.border}` }}>
+                                    <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{tool.name}</div>
+                                    <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>🔧 {tool.function}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {section.type === "principles" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {section.items.map((p, i) => (
+                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: COLORS.bg, borderRadius: 10, padding: "12px 16px", border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ width: 26, height: 26, borderRadius: "50%", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, color: "white", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                                    <span style={{ fontSize: 14, color: COLORS.text }}>{p}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {section.type === "chapters" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {section.items.map((ch, i) => (
+                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: COLORS.bg, borderRadius: 10, padding: "12px 16px", border: `1px solid ${COLORS.border}` }}>
+                                    <span style={{ width: 26, height: 26, borderRadius: "50%", background: `linear-gradient(135deg, ${COLORS.blue}, ${COLORS.cyan})`, color: "white", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                                    <span style={{ fontSize: 14, color: COLORS.text }}>{ch}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ))}
+
+            {/* Tarefas com edição inline */}
+            <div style={{ background: COLORS.card, borderRadius: 16, padding: 24, border: `1px solid ${COLORS.border}`, marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Tarefas ({completedTasks}/{totalTasks})</h3>
+                </div>
+                <div style={{ marginBottom: 12 }}><ProgressBar value={progress} color={focusColor.border} /></div>
+                {tasks.map((task, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                        <div onClick={() => onToggleTask(project.id, i)} style={{
+                            width: 24, height: 24, borderRadius: 6,
+                            border: task.done ? "none" : `2px solid ${COLORS.border}`,
+                            background: task.done ? `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})` : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0
+                        }}>
+                            {task.done && <svg width="13" height="10" viewBox="0 0 11 8" fill="none"><path d="M1 3.5L4 6.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            {editingTaskIdx === i ? (
+                                <div style={{ display: "flex", gap: 6 }}>
+                                    <input type="text" value={editingTaskText} onChange={e => setEditingTaskText(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter") saveEditTask(); else if (e.key === "Escape") cancelEditTask(); }}
+                                        autoFocus style={{ flex: 1, padding: "6px 10px", border: `2px solid ${focusColor.border}`, borderRadius: 6, fontSize: 13, outline: "none" }} />
+                                    <button onClick={saveEditTask} style={{ padding: "6px 12px", background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`, border: "none", borderRadius: 6, color: "white", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✓</button>
+                                    <button onClick={cancelEditTask} style={{ padding: "6px 10px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 11, cursor: "pointer", color: COLORS.textMuted }}>✕</button>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: 14, color: task.done ? COLORS.textMuted : COLORS.text, textDecoration: task.done ? "line-through" : "none" }}>{task.text}</div>
+                            )}
+                        </div>
+                        {editingTaskIdx !== i && (
+                            <div style={{ display: "flex", gap: 4 }}>
+                                <button onClick={() => startEditTask(i)} style={{ background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 14, opacity: 0.5, padding: "2px 4px" }} title="Editar tarefa">✏️</button>
+                                <button onClick={() => onDeleteTask(project.id, i)} style={{ background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 16, opacity: 0.5, padding: "2px 4px" }} title="Excluir tarefa">×</button>
+                            </div>
+                        )}
+                    </div>
+                ))}
+                <AddTaskInput onAdd={(text) => onAddTask(project.id, text)} focusColor={focusColor} />
+            </div>
+        </div>
+    );
+};
+
+window.DashboardView = ({ projects, onSelectProject, selectedProject, filterFocus, onSetFilterFocus, onToggleTask, onAddTask, onDeleteTask, onEditTask, onEditProject, onDeleteProject, getProjectProgress }) => {
+    const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+    const [editingProject, setEditingProject] = useState(null);
+    const focuses = ["Todos", ...new Set(projects.map(p => p.focus))];
+    const filteredProjects = filterFocus === "Todos" ? projects : projects.filter(p => p.focus === filterFocus);
+
+    const totalTasks = projects.reduce((s, p) => s + p.tasks.length, 0);
+    const doneTasks = projects.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0);
+    const avgProgress = projects.length > 0 ? Math.round(projects.reduce((s, p) => s + getProjectProgress(p), 0) / projects.length) : 0;
+    const highPriority = projects.filter(p => p.priority === "Alta").length;
+
+    const summaryCards = [
+        { label: "Total de Projetos", value: projects.length, icon: "📋", color: COLORS.green, bgColor: COLORS.lightGreen },
+        { label: "Tarefas Concluídas", value: `${doneTasks}/${totalTasks}`, icon: "✅", color: COLORS.teal, bgColor: COLORS.lightTeal },
+        { label: "Progresso Médio", value: `${avgProgress}%`, icon: "📈", color: COLORS.blue, bgColor: COLORS.lightBlue },
+        { label: "Prioridade Alta", value: highPriority, icon: "🔥", color: "#D04040", bgColor: "#FFE8E8" },
+        { label: "Membros Ativos", value: 11, icon: "👥", color: COLORS.cyan, bgColor: COLORS.lightCyan },
+    ];
+
+    const handleSaveProject = (data) => {
+        onEditProject(data);
+        setIsProjectModalOpen(false);
+        setEditingProject(null);
+    };
+
+    const handleOpenEditProject = (project) => {
+        setEditingProject(project);
+        setIsProjectModalOpen(true);
+    };
+
+    if (selectedProject) {
+        return (
+            <div>
+                <ProjectFullPage
+                    project={selectedProject}
+                    onBack={() => onSelectProject(null)}
+                    tasks={selectedProject.tasks}
+                    onToggleTask={onToggleTask}
+                    onAddTask={onAddTask}
+                    onDeleteTask={onDeleteTask}
+                    onEditTask={onEditTask}
+                    onEditProject={handleOpenEditProject}
+                    onDeleteProject={onDeleteProject}
+                />
+                <ProjectFormModal isOpen={isProjectModalOpen} onClose={() => { setIsProjectModalOpen(false); setEditingProject(null); }}
+                    onSave={handleSaveProject} editProject={editingProject} />
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ animation: "fadeIn 0.4s ease" }}>
+            {/* Summary Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
+                {summaryCards.map((card, i) => (
+                    <div key={i} style={{
+                        background: COLORS.card, borderRadius: 14, padding: "18px 16px", border: `1px solid ${COLORS.border}`,
+                        display: "flex", alignItems: "center", gap: 14, transition: "all 0.2s"
+                    }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 10, background: card.bgColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{card.icon}</div>
+                        <div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.text }}>{card.value}</div>
+                            <div style={{ fontSize: 11, color: COLORS.textMuted }}>{card.label}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filters */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+                {focuses.map(f => {
+                    const isActive = filterFocus === f;
+                    const fc = f === "Todos" ? { bg: COLORS.bg, text: COLORS.text, border: COLORS.border } : (FOCUS_COLORS[f] || FOCUS_COLORS["Educação"]);
+                    return (
+                        <button key={f} onClick={() => onSetFilterFocus(f)}
+                            style={{
+                                padding: "8px 16px", borderRadius: 20, border: isActive ? `2px solid ${fc.border}` : `1px solid ${COLORS.border}`,
+                                background: isActive ? fc.bg : COLORS.card, color: isActive ? fc.text : COLORS.textMuted,
+                                fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+                            }}>
+                            {f}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Project Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                {filteredProjects.map(p => (
+                    <ProjectCard key={p.id} project={p} onClick={onSelectProject}
+                        isSelected={false} progress={getProjectProgress(p)} />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ========== app.js ==========
+
+const Sidebar = ({ activeView, setActiveView, collapsed, setCollapsed, projects, getProjectProgress, onLogout }) => {
+    const allTasks = projects.reduce((s, p) => s + p.tasks.length, 0);
+    const allDone = projects.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0);
+    const overallProgress = allTasks > 0 ? Math.round((allDone / allTasks) * 100) : 0;
+
+    return (
+        <div style={{
+            width: collapsed ? 68 : 260, background: `linear-gradient(180deg, ${COLORS.darkBlue}, ${COLORS.blue})`,
+            display: "flex", flexDirection: "column", transition: "width 0.3s ease", flexShrink: 0, overflow: "hidden"
+        }}>
+            {/* Logo */}
+            <div style={{
+                padding: collapsed ? "20px 0" : "20px 24px", display: "flex", alignItems: "center",
+                justifyContent: collapsed ? "center" : "flex-start", gap: 14, borderBottom: "1px solid rgba(255,255,255,0.08)", minHeight: 72
+            }}>
+                <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "white", flexShrink: 0
+                }}>L</div>
+                {!collapsed && (
+                    <div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "white", letterSpacing: 1 }}>LIAS</div>
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: -2 }}>Planejamento 2026</div>
+                    </div>
+                )}
+            </div>
+
+            {/* Toggle */}
+            <div style={{ padding: "12px", display: "flex", justifyContent: collapsed ? "center" : "flex-end" }}>
+                <button onClick={() => setCollapsed(!collapsed)} style={{
+                    background: "rgba(255,255,255,0.08)", border: "none",
+                    borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "rgba(255,255,255,0.6)", fontSize: 14, transition: "all 0.2s"
+                }}>
+                    {collapsed ? "→" : "←"}
+                </button>
+            </div>
+
+            {/* Nav Items */}
+            <div style={{ flex: 1, padding: collapsed ? "8px" : "8px 14px" }}>
+                {SIDEBAR_ITEMS.map(item => {
+                    const isActive = activeView === item.id;
+                    return (
+                        <div key={item.id} onClick={() => setActiveView(item.id)}
+                            style={{
+                                display: "flex", alignItems: "center", gap: 14,
+                                padding: collapsed ? "14px 0" : "12px 16px",
+                                justifyContent: collapsed ? "center" : "flex-start",
+                                marginBottom: 4, borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                                background: isActive ? "rgba(255,255,255,0.12)" : "transparent",
+                                borderLeft: isActive ? `3px solid ${COLORS.teal}` : "3px solid transparent"
+                            }}>
+                            <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                            {!collapsed && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? "white" : "rgba(255,255,255,0.6)" }}>{item.label}</span>}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Progress */}
+            {!collapsed && (
+                <div style={{ padding: "20px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>Progresso Geral</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.teal }}>{overallProgress}%</span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)" }}>
+                        <div style={{ width: `${overallProgress}%`, height: "100%", borderRadius: 3, background: `linear-gradient(90deg, ${COLORS.green}, ${COLORS.teal})`, transition: "width 0.4s ease" }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 6 }}>{allDone} de {allTasks} tarefas concluídas</div>
+                </div>
+            )}
+
+            {/* Botão Sair */}
+            <div style={{ padding: collapsed ? "12px 8px" : "12px 14px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <div onClick={onLogout}
+                    style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: collapsed ? "12px 0" : "12px 16px",
+                        justifyContent: collapsed ? "center" : "flex-start",
+                        borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: "rgba(255,80,80,0.08)"
+                    }}>
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>🚪</span>
+                    {!collapsed && <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,120,120,0.8)" }}>Sair</span>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const Header = ({ activeView, userEmail, onLogout }) => {
+    const titles = { dashboard: "Dashboard Estratégico", timeline: "Cronograma", teams: "Equipes", metrics: "Métricas" };
+    const subtitles = { dashboard: "Visão geral dos projetos da LIAS 2026", timeline: "Calendário de eventos e entregas", teams: "Membros e atividades da equipe", metrics: "Indicadores de desempenho" };
+    return (
+        <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "20px 32px", background: COLORS.card, borderBottom: `1px solid ${COLORS.border}`
+        }}>
+            <div>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: COLORS.text }}>{titles[activeView]}</h1>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: COLORS.textMuted }}>{subtitles[activeView]}</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: COLORS.bg, borderRadius: 10, border: `1px solid ${COLORS.border}` }}>
+                    <span style={{ fontSize: 14 }}>🔍</span>
+                    <span style={{ fontSize: 13, color: COLORS.textMuted }}>Buscar...</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: 10, background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.teal})`,
+                        display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 14, fontWeight: 700
+                    }}>
+                        {userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <button onClick={onLogout} title="Sair da conta"
+                        style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 12, color: COLORS.textMuted, fontWeight: 500, transition: "all 0.2s" }}>
+                        Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const App = () => {
+    const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
+    const [activeView, setActiveView] = useState("dashboard");
+    const [collapsed, setCollapsed] = useState(false);
+    const [projects, setProjects] = useState(window.initialProjects);
+    const [events, setEvents] = useState(window.initialEvents);
+    const [members, setMembers] = useState(window.initialMembers);
+    const [selectedProject, setSelectedProject] = useState(null);
+    const [filterFocus, setFilterFocus] = useState("Todos");
+
+    const handleLoginSuccess = () => setIsAuthenticated(true);
+    const handleLogout = () => { authService.logout(); setIsAuthenticated(false); };
+
+    // Se não autenticado, mostra login
+    if (!isAuthenticated) {
+        return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    const getProjectProgress = (p) => { const t = p.tasks.length; return t > 0 ? (p.tasks.filter(t => t.done).length / t) * 100 : 0; };
+
+    // ===== Project CRUD =====
+    const editProject = (data) => setProjects(prev => prev.map(p => p.id === data.id ? { ...p, ...data } : p));
+    const deleteProject = (pid) => { setProjects(prev => prev.filter(p => p.id !== pid)); setSelectedProject(null); };
+
+    // ===== Task CRUD =====
+    const toggleTask = (pid, idx) => setProjects(prev => prev.map(p => p.id === pid ? { ...p, tasks: p.tasks.map((t, i) => i === idx ? { ...t, done: !t.done } : t) } : p));
+    const addTask = (pid, text) => setProjects(prev => prev.map(p => p.id === pid ? { ...p, tasks: [...p.tasks, { text, done: false }] } : p));
+    const deleteTask = (pid, idx) => setProjects(prev => prev.map(p => p.id === pid ? { ...p, tasks: p.tasks.filter((_, i) => i !== idx) } : p));
+    const editTask = (pid, idx, newText) => setProjects(prev => prev.map(p => p.id === pid ? { ...p, tasks: p.tasks.map((t, i) => i === idx ? { ...t, text: newText } : t) } : p));
+
+    // ===== Event CRUD =====
+    const addEvent = (ev) => setEvents(prev => [...prev, ev]);
+    const editEvent = (ev) => setEvents(prev => prev.map(e => e.id === ev.id ? ev : e));
+    const deleteEvent = (id) => setEvents(prev => prev.filter(e => e.id !== id));
+
+    // ===== Member CRUD =====
+    const addMember = (m) => setMembers(prev => [...prev, m]);
+    const editMember = (m) => setMembers(prev => prev.map(mm => mm.id === m.id ? m : mm));
+    const deleteMember = (id) => setMembers(prev => prev.filter(m => m.id !== id));
+
+    // ===== Activity CRUD =====
+    const toggleActivity = (mid, aid) => setMembers(prev => prev.map(m => m.id === mid ? { ...m, activities: m.activities.map(a => a.id === aid ? { ...a, done: !a.done } : a) } : m));
+    const addActivity = (mid, act) => setMembers(prev => prev.map(m => m.id === mid ? { ...m, activities: [...m.activities, act] } : m));
+    const deleteActivity = (mid, aid) => setMembers(prev => prev.map(m => m.id === mid ? { ...m, activities: m.activities.filter(a => a.id !== aid) } : m));
+    const editActivity = (mid, act) => setMembers(prev => prev.map(m => m.id === mid ? { ...m, activities: m.activities.map(a => a.id === act.id ? act : a) } : m));
+
+    const currentSelected = selectedProject ? projects.find(p => p.id === selectedProject.id) : null;
+
+    return (
+        <React.Fragment>
+            <Sidebar activeView={activeView} setActiveView={setActiveView} collapsed={collapsed} setCollapsed={setCollapsed} projects={projects} getProjectProgress={getProjectProgress} onLogout={handleLogout} />
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <Header activeView={activeView} userEmail={authService.getEmail()} onLogout={handleLogout} />
+                <div style={{ flex: 1, overflow: "auto", padding: 24, background: COLORS.bg }}>
+                    {activeView === "dashboard" && (
+                        <DashboardView projects={projects} onSelectProject={(p) => setSelectedProject(p)}
+                            selectedProject={currentSelected} filterFocus={filterFocus} onSetFilterFocus={setFilterFocus}
+                            onToggleTask={toggleTask} onAddTask={addTask} onDeleteTask={deleteTask} onEditTask={editTask}
+                            onEditProject={editProject} onDeleteProject={deleteProject} getProjectProgress={getProjectProgress} />
+                    )}
+                    {activeView === "timeline" && (
+                        <TimelineView projects={projects} events={events} onAddEvent={addEvent} onEditEvent={editEvent} onDeleteEvent={deleteEvent} />
+                    )}
+                    {activeView === "teams" && (
+                        <TeamsView projects={projects} members={members} onToggleActivity={toggleActivity}
+                            onAddMember={addMember} onEditMember={editMember} onDeleteMember={deleteMember}
+                            onAddActivity={addActivity} onDeleteActivity={deleteActivity} onEditActivity={editActivity} />
+                    )}
+                    {activeView === "metrics" && (
+                        <MetricsView projects={projects} getProjectProgress={getProjectProgress} />
+                    )}
+                </div>
+            </div>
+        </React.Fragment>
+    );
+};
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+  </script>
+</body>
+</html>
